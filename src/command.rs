@@ -12,7 +12,7 @@ use nom::{
 
 use super::{builtin::Builtin, ALIASES};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Command {
     pub keyword: String,
     pub args: Vec<String>,
@@ -38,19 +38,21 @@ impl Command {
     /// # Examples
     ///
     /// ```
-    /// let command = match command::Command::tokenize("ls -a /") {
-    ///     Ok(tokens) => tokens.1,
-    ///     Err(error) => {
-    ///         eprintln!("rshell: {error}");
-    ///         continue;
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let command = match rshell::command::Command::parse("ls / -a") {
+    ///         Ok(result) => result.1[0].clone(),
+    ///         Err(error) => {
+    ///             eprintln!("rshell: {error}");
+    ///             return;
+    ///         }
+    ///     };
+    ///
+    ///     let exit_code = command.interpret().await;
+    ///     match exit_code {
+    ///         0 => println!("Program executed successfully"),
+    ///         code => eprintln!("Program exited with error code {code}"),
     ///     }
-    /// };
-    ///
-    /// let exit_code = command.interpret().await;
-    ///
-    /// match exit_code {
-    ///     0 => println!("Command executed successfully."),
-    ///     code => eprintln!("Something went wrong. Exited with exit code {code}"),
     /// }
     /// ```
     pub async fn interpret(&self) -> i32 {
@@ -137,30 +139,33 @@ impl Command {
 
         println!("{:?}", commands);
 
-        let commands: Vec<Self> = commands.iter().map(|parts| {
-            let parts: Vec<String> = parts
-                .iter()
-                .map(|part| {
-                    if let Some(var) = part.strip_prefix("${") {
-                        if let Some(var) = var.strip_suffix('}') {
-                            let (var, default) = var.split_once(":-").unwrap_or((var, ""));
-                            env::var(var).unwrap_or_else(|_| default.to_string())
+        let commands: Vec<Self> = commands
+            .iter()
+            .map(|parts| {
+                let parts: Vec<String> = parts
+                    .iter()
+                    .map(|part| {
+                        if let Some(var) = part.strip_prefix("${") {
+                            if let Some(var) = var.strip_suffix('}') {
+                                let (var, default) = var.split_once(":-").unwrap_or((var, ""));
+                                env::var(var).unwrap_or_else(|_| default.to_string())
+                            } else {
+                                String::new()
+                            }
+                        } else if let Some(var) = part.strip_prefix('$') {
+                            env::var(var).unwrap_or_default()
                         } else {
-                            String::new()
+                            part.clone()
                         }
-                    } else if let Some(var) = part.strip_prefix('$') {
-                        env::var(var).unwrap_or_default()
-                    } else {
-                        part.clone()
-                    }
-                })
-                .collect();
+                    })
+                    .collect();
 
-            Self {
-                keyword: parts.get(0).unwrap_or(&String::new()).clone(),
-                args: parts[1..].to_vec(),
-            }
-        }).collect();
+                Self {
+                    keyword: parts.get(0).unwrap_or(&String::new()).clone(),
+                    args: parts[1..].to_vec(),
+                }
+            })
+            .collect();
 
         Ok((i, commands))
     }
