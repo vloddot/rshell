@@ -1,0 +1,13 @@
+[package]
+name = "rshell"
+version = "1.0.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+termion = "2.0.1"
+nom = "7.1.1"
+lazy_static = "1.4.0"
+tokio = { version = "1.22.0", features = ["full"] }
+signal-hook = "0.3.14"
