@@ -112,10 +112,6 @@ impl Command {
     /// # Errors
     ///
     /// This function will return an error if something went wrong while tokenizing.
-    ///
-    /// # Panics
-    ///
-    /// Panics if .
     pub fn parse(i: &str) -> IResult<&str, Vec<Self>> {
         // match any whitespace before
         let (i, _) = space0(i)?;
