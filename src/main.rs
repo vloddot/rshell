@@ -72,10 +72,11 @@ async fn main() {
             }
         }
     }
+
     let mut exit_code = 0;
 
     loop {
-        let current_dir = std::env::current_dir().expect("Current directory not found.");
+        let current_dir = env::current_dir().expect("Current directory not found.");
 
         print_prompt(exit_code, home_dir.as_deref(), &current_dir);
 

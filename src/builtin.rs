@@ -35,7 +35,7 @@ impl Builtin {
     ///
     /// # Panics
     ///
-    /// Panics if the alias lock could not be obtained
+    /// Panics if the alias lock could not be obtained.
     #[must_use]
     pub fn alias(args: &[String]) -> i32 {
         let mut lock = ALIASES.lock().unwrap();

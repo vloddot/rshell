@@ -6,7 +6,7 @@ use nom::{
     bytes::complete::{tag, take_while, take_while1},
     character::complete::{char, space0},
     combinator::opt,
-    multi::{many_m_n, separated_list0},
+    multi::many_m_n,
     IResult,
 };
 
@@ -127,18 +127,33 @@ impl Command {
             ));
         }
 
-        // get parsed command and its arguments.
-        let result = separated_list0(tag("&&"), parts)(i)?;
+        let mut commands = Vec::new();
 
-        let i = result.0;
-        let commands = result.1;
+        let mut i = i;
+        loop {
+            if i.is_empty() {
+                break;
+            }
+            let (i2, parts1) = parts(i)?;
+            let i2 = i2.trim();
+            let (i2, and) = opt(tag("&&"))(i2)?;
 
-        println!("{:?}", commands);
+            if and.is_some() {
+                commands.push(parts1);
+                let (i2, parts2) = parts(i2)?;
+                i = i2;
+                commands.push(parts2);
+            } else {
+                i = i2;
+                commands.push(parts1);
+                break;
+            }
+        }
 
-        let commands: Vec<Self> = commands
+        let commands = commands
             .iter()
             .map(|parts| {
-                let parts: Vec<String> = parts
+                let parts: Vec<_> = parts
                     .iter()
                     .map(|part| {
                         if let Some(var) = part.strip_prefix("${") {
@@ -195,7 +210,7 @@ fn string(i: &str) -> IResult<&str, String> {
 
 #[doc(hidden)]
 fn plain_string(i: &str) -> IResult<&str, &str> {
-    take_while1(|c| !vec!['\'', '"', ' ', '\r', '\n'].contains(&c))(i)
+    take_while1(|c| !vec!['\'', '"', ' ', '\r', '\n', '&'].contains(&c))(i)
 }
 
 #[doc(hidden)]
@@ -223,9 +238,9 @@ mod command_parse_tests {
     #[test]
     fn test_simple_command() {
         assert_eq!(
-            Command::parse("ls / -a\n"),
+            Command::parse("ls / -a"),
             Ok((
-                "\n",
+                "",
                 vec![Command {
                     keyword: String::from("ls"),
                     args: vec![String::from("/"), String::from("-a")],
@@ -265,13 +280,33 @@ mod command_parse_tests {
     #[test]
     fn test_variables() {
         assert_eq!(
-            Command::parse("echo $USER\n"),
+            Command::parse("echo $USER"),
             Ok((
-                "\n",
+                "",
                 vec![Command {
                     keyword: String::from("echo"),
                     args: vec![env::var("USER").unwrap()],
                 }],
+            ))
+        );
+    }
+
+    #[test]
+    fn test_and() {
+        assert_eq!(
+            Command::parse("echo hello && echo bye;"),
+            Ok((
+                "",
+                vec![
+                    Command {
+                        keyword: String::from("echo"),
+                        args: vec![String::from("hello")],
+                    },
+                    Command {
+                        keyword: String::from("echo"),
+                        args: vec![String::from("bye;")],
+                    }
+                ],
             ))
         );
     }
