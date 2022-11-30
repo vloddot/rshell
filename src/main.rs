@@ -1,4 +1,4 @@
-use rshell::Command;
+use rshell::{Command, GREEN_FG, RED_FG, UNICODE_PROMPT, RESET_FG};
 
 use std::{
     env,
@@ -137,10 +137,10 @@ fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
     }
 
     match exit_code {
-        0 => print!("{}❯ ", termion::color::Fg(termion::color::Green)),
-        _ => print!("{}❯ ", termion::color::Fg(termion::color::Red)),
+        0 => print!("{}{} ", GREEN_FG, UNICODE_PROMPT),
+        _ => print!("{}{} ", RED_FG, UNICODE_PROMPT),
     }
-    print!("{}", termion::color::Fg(termion::color::Reset));
+    print!("{}", RESET_FG);
 
     std::io::stdout().flush().expect("Could not flush.");
 }

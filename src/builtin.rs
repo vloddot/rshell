@@ -102,9 +102,7 @@ impl Builtin {
         };
 
         for (i, line) in history.lines().enumerate() {
-            let line = line.unwrap();
-
-            println!("{} {}", i + 1, line);
+            println!("{} {}", i + 1, line.unwrap());
         }
         0
     }
@@ -114,7 +112,7 @@ impl Builtin {
     pub fn pwd(_args: &[String]) -> i32 {
         let Ok(current_dir) = std::env::current_dir() else {
             eprintln!("rshell: could not find current directory");
-            return 1
+            return 1;
         };
         println!("{}", current_dir.display());
         0
