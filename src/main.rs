@@ -1,4 +1,4 @@
-use rshell::{Command, GREEN_FG, RED_FG, UNICODE_PROMPT, RESET_FG};
+use rshell::{Command, GREEN_FG, RED_FG, RESET_FG, RSHELL_RC, RSHISTORY, UNICODE_PROMPT};
 
 use std::{
     env,
@@ -25,7 +25,7 @@ async fn main() {
     let history = home_dir.clone();
 
     let mut history = if let Some(mut history) = history {
-        history.push(".rshistory");
+        history.push(RSHISTORY);
 
         match OpenOptions::new()
             .append(true)
@@ -44,7 +44,7 @@ async fn main() {
     let shellrc = home_dir.clone();
 
     if let Some(mut shellrc) = shellrc {
-        shellrc.push(".rshellrc");
+        shellrc.push(RSHELL_RC);
 
         let shellrc = match tokio::fs::read(shellrc).await {
             Ok(rc) => Some(rc),

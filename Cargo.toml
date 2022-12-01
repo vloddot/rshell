@@ -11,3 +11,4 @@ nom = "7.1.1"
 lazy_static = "1.4.0"
 tokio = { version = "1.22.0", features = ["full"] }
 signal-hook = "0.3.14"
+async-recursion = "1.0.0"

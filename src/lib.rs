@@ -9,10 +9,14 @@ pub mod command;
 
 pub use command::Command;
 
-pub const GREEN_FG: termion::color::Fg<termion::color::Green> = termion::color::Fg(termion::color::Green);
+pub const GREEN_FG: termion::color::Fg<termion::color::Green> =
+    termion::color::Fg(termion::color::Green);
 pub const RED_FG: termion::color::Fg<termion::color::Red> = termion::color::Fg(termion::color::Red);
-pub const RESET_FG: termion::color::Fg<termion::color::Reset> = termion::color::Fg(termion::color::Reset);
+pub const RESET_FG: termion::color::Fg<termion::color::Reset> =
+    termion::color::Fg(termion::color::Reset);
 pub const UNICODE_PROMPT: char = '❯';
+pub const RSHISTORY: &str = ".rshistory";
+pub const RSHELL_RC: &str = ".rshellrc";
 
 lazy_static! {
     pub static ref ALIASES: Mutex<Aliases> = Mutex::new(Aliases::new());

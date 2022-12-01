@@ -1,4 +1,4 @@
-use std::{env, str::FromStr};
+use std::env;
 use tokio::process;
 
 use nom::{
@@ -25,7 +25,7 @@ impl Command {
     ///
     /// # Panics
     ///
-    /// Panics if the error isn't a raw OS error or the process' code could not be extracted.
+    /// Panics if the spawned command process' exit code could not be extracted.
     ///
     /// # Returns
     ///
@@ -56,14 +56,13 @@ impl Command {
     /// }
     /// ```
     pub async fn interpret(&self) -> i32 {
-        match Builtin::from_str(&self.keyword) {
-            Ok(Builtin::Alias) => Builtin::alias(&self.args),
-            Ok(Builtin::Cd) => Builtin::cd(&self.args),
-            Ok(Builtin::Echo) => Builtin::echo(&self.args),
-            Ok(Builtin::Exit) => std::process::exit(Builtin::exit(&self.args)),
-            Ok(Builtin::History) => Builtin::history(&self.args).await,
-            Ok(Builtin::Pwd) => Builtin::pwd(&self.args),
+        let mut args = vec![self.keyword.clone()];
+        args.extend(self.args.clone());
+        let args = args.as_slice();
+        match Builtin::run(args).await {
+            Ok(result) => result,
             Err(command) => {
+                let command = command.to_string();
                 if command.is_empty() {
                     return 0;
                 }
@@ -102,20 +101,20 @@ impl Command {
                     Err(error) => {
                         eprintln!("rshell: {error}");
                         3
-                    },
+                    }
                 }
             }
         }
     }
 
-    /// This function tokenizes a string and returns a [`Result<(&str, Command), nom::Err<nom::error::Error>>`]
+    /// This function parses a string and returns a [`Result<(&str, Command), nom::Err<nom::error::Error>>`]
     ///
     /// # Errors
     ///
     /// This function will return an error if something went wrong while tokenizing.
     pub fn parse(i: &str) -> IResult<&str, Vec<Self>> {
         // match any whitespace before
-        let (i, _) = space0(i)?;
+        let (mut i, _) = space0(i)?;
 
         // if no command is given
         if i.is_empty() || i == "\n" {
@@ -130,7 +129,6 @@ impl Command {
 
         let mut commands = Vec::new();
 
-        let mut i = i;
         loop {
             if i.is_empty() {
                 break;

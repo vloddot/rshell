@@ -1,17 +1,43 @@
-use std::env;
-use std::io::BufRead;
-use std::path::PathBuf;
-use std::str::FromStr;
-
 use super::ALIASES;
+use async_recursion::async_recursion;
+use std::{env, io::BufRead, path::PathBuf, str::FromStr};
 
 pub enum Builtin {
     Alias,
+    Builtin,
     Cd,
     Echo,
     Exit,
     History,
     Pwd,
+}
+
+pub enum ErrorKind {
+    InvalidInput,
+    InvalidBuiltin,
+}
+
+pub struct Error<T = String> {
+    pub kind: ErrorKind,
+    pub message: T,
+}
+
+impl<T> Error<T>
+where
+    T: std::fmt::Display,
+{
+    pub fn new(kind: ErrorKind, message: T) -> Self {
+        Self { kind, message }
+    }
+}
+
+impl<T> std::fmt::Display for Error<T>
+where
+    T: std::fmt::Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
 }
 
 impl FromStr for Builtin {
@@ -21,7 +47,8 @@ impl FromStr for Builtin {
         match s {
             "alias" => Ok(Self::Alias),
             "echo" => Ok(Self::Echo),
-            "exit" => Ok(Self::Exit),
+            "exit" | "bye" => Ok(Self::Exit),
+            "builtin" => Ok(Self::Builtin),
             "history" => Ok(Self::History),
             "cd" => Ok(Self::Cd),
             "pwd" => Ok(Self::Pwd),
@@ -64,9 +91,52 @@ impl Builtin {
                 }
             }
             _ => {
-                eprintln!("Too many arguments");
+                eprintln!("rshell: Too many arguments");
                 3
             }
+        }
+    }
+
+    #[async_recursion]
+    #[must_use]
+    pub async fn builtin(args: &[String]) -> i32 {
+        match Self::run(args).await {
+            Ok(result) => result,
+            Err(error) => match error.kind {
+                ErrorKind::InvalidBuiltin => {
+                    eprintln!("rshell: no such builtin: {error}");
+                    1
+                }
+                ErrorKind::InvalidInput => {
+                    eprintln!("rshell: {error}");
+                    2
+                }
+            },
+        }
+    }
+
+    /// Runs a builtin if it is one.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the command is not a builtin [`std::io::ErrorKind::InvalidInput`].
+    pub async fn run(args: &[String]) -> Result<i32, Error> {
+        if args.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                String::from("expected 1 argument"),
+            ));
+        }
+
+        match Self::from_str(args[0].as_str()) {
+            Ok(Self::Alias) => Ok(Self::alias(&args[1..])),
+            Ok(Self::Builtin) => Ok(Self::builtin(&args[1..]).await),
+            Ok(Self::Cd) => Ok(Self::cd(&args[1..])),
+            Ok(Self::Echo) => Ok(Self::echo(&args[1..])),
+            Ok(Self::Exit) => Ok(Self::exit(&args[1..])),
+            Ok(Self::History) => Ok(Self::history(&args[1..]).await),
+            Ok(Self::Pwd) => Ok(Self::pwd(&args[1..])),
+            Err(command) => Err(Error::new(ErrorKind::InvalidBuiltin, command)),
         }
     }
 
@@ -76,7 +146,7 @@ impl Builtin {
         let home_dir = env::var("HOME").unwrap_or_else(|_| "/".to_string());
 
         if let Err(error) = std::env::set_current_dir(args.get(0).unwrap_or(&home_dir)) {
-            eprintln!("rshell: {}", error);
+            eprintln!("rshell: {error}");
             1
         } else {
             0
@@ -88,6 +158,16 @@ impl Builtin {
     pub fn echo(args: &[String]) -> i32 {
         println!("{}", args.join(" "));
         0
+    }
+
+    /// Mimics `exit` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man3/exit.3.html)
+    #[must_use]
+    pub fn exit(args: &[String]) -> i32 {
+        if args.is_empty() {
+            return 0;
+        }
+
+        args[0].parse().unwrap_or(0)
     }
 
     /// Mimics `history` builtin Unix shell command. [Linux man page](https://www.man7.org/linux/man-pages/man3/history.3.html)
@@ -119,15 +199,5 @@ impl Builtin {
         };
         println!("{}", current_dir.display());
         0
-    }
-
-    /// Mimics `exit` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man3/exit.3.html)
-    #[must_use]
-    pub fn exit(args: &[String]) -> i32 {
-        if args.is_empty() {
-            return 0;
-        }
-
-        args[0].parse().unwrap_or(0)
     }
 }
