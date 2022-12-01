@@ -86,22 +86,23 @@ impl Command {
                     }
                 };
 
-                let mut process = process::Command::new(command)
+                let process = process::Command::new(command)
                     .args(self.args.clone())
                     .spawn();
 
-                if let Err(error) = process {
-                    eprintln!("{}", error);
-                    return error.raw_os_error().unwrap();
-                }
-
                 // Wait for the command to run.
-                match process.as_mut().unwrap().wait().await {
-                    Ok(process) => process.code().unwrap(),
+                match process {
+                    Ok(mut process) => match process.wait().await {
+                        Ok(process) => process.code().unwrap(),
+                        Err(error) => {
+                            eprintln!("rshell: {error}");
+                            2
+                        }
+                    },
                     Err(error) => {
                         eprintln!("rshell: {error}");
-                        2
-                    }
+                        3
+                    },
                 }
             }
         }

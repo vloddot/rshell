@@ -38,7 +38,10 @@ impl Builtin {
     /// Panics if the alias lock could not be obtained.
     #[must_use]
     pub fn alias(args: &[String]) -> i32 {
-        let mut lock = ALIASES.lock().unwrap();
+        let mut lock = match ALIASES.lock() {
+            Ok(lock) => lock,
+            Err(_) => return 1,
+        };
 
         match args.len() {
             0 => {
@@ -57,12 +60,12 @@ impl Builtin {
                     0
                 } else {
                     println!("{} not found", args[0]);
-                    1
+                    2
                 }
             }
             _ => {
                 eprintln!("Too many arguments");
-                2
+                3
             }
         }
     }
