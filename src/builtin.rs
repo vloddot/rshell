@@ -1,6 +1,8 @@
+use crate::error;
+
 use super::ALIASES;
 use async_recursion::async_recursion;
-use std::{env, io::BufRead, path::PathBuf, str::FromStr};
+use std::{env, fmt::Display, io::BufRead, path::PathBuf, str::FromStr};
 
 pub enum Builtin {
     Alias,
@@ -24,16 +26,16 @@ pub struct Error<T = String> {
 
 impl<T> Error<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
     pub fn new(kind: ErrorKind, message: T) -> Self {
         Self { kind, message }
     }
 }
 
-impl<T> std::fmt::Display for Error<T>
+impl<T> Display for Error<T>
 where
-    T: std::fmt::Display,
+    T: Display,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
@@ -73,7 +75,7 @@ impl Builtin {
         match args.len() {
             0 => {
                 for key in lock.aliases.keys() {
-                    println!("{}='{}'", key, lock.get(key).unwrap());
+                    println!("{}='{}'\r", key, lock.get(key).unwrap());
                 }
                 0
             }
@@ -83,15 +85,15 @@ impl Builtin {
                     lock.set(key.to_string(), value.to_string());
                     0
                 } else if let Some(value) = lock.get(args[0].clone().as_str()) {
-                    println!("{}='{}'", args[0], value);
+                    println!("{}='{}'\r", args[0], value);
                     0
                 } else {
-                    println!("{} not found", args[0]);
+                    error!("{} not found", args[0]);
                     2
                 }
             }
             _ => {
-                eprintln!("rshell: Too many arguments");
+                error!("too many arguments");
                 3
             }
         }
@@ -104,11 +106,11 @@ impl Builtin {
             Ok(result) => result,
             Err(error) => match error.kind {
                 ErrorKind::InvalidBuiltin => {
-                    eprintln!("rshell: no such builtin: {error}");
+                    error!("no such builtin: {error}");
                     1
                 }
                 ErrorKind::InvalidInput => {
-                    eprintln!("rshell: {error}");
+                    error!("{error}");
                     2
                 }
             },
@@ -146,7 +148,7 @@ impl Builtin {
         let home_dir = env::var("HOME").unwrap_or_else(|_| "/".to_string());
 
         if let Err(error) = std::env::set_current_dir(args.get(0).unwrap_or(&home_dir)) {
-            eprintln!("rshell: {error}");
+            error!("{error}");
             1
         } else {
             0
@@ -156,7 +158,7 @@ impl Builtin {
     /// Mimics `echo` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/echo.1p.html)
     #[must_use]
     pub fn echo(args: &[String]) -> i32 {
-        println!("{}", args.join(" "));
+        println!("{}\r", args.join(" "));
         0
     }
 
@@ -180,12 +182,12 @@ impl Builtin {
         history.push(".rshistory");
 
         let Ok(history) = tokio::fs::read(history).await else {
-            eprintln!("rshell: could not read from ~/.rshistory");
+            error!("could not read from ~/.rshistory");
             return 1;
         };
 
         for (i, line) in history.lines().enumerate() {
-            println!("{} {}", i + 1, line.unwrap());
+            println!("{} {}\r", i + 1, line.unwrap());
         }
         0
     }
@@ -194,10 +196,10 @@ impl Builtin {
     #[must_use]
     pub fn pwd(_args: &[String]) -> i32 {
         let Ok(current_dir) = std::env::current_dir() else {
-            eprintln!("rshell: could not find current directory");
+            error!("could not find current directory");
             return 1;
         };
-        println!("{}", current_dir.display());
+        println!("{}\r", current_dir.display());
         0
     }
 }

@@ -22,9 +22,7 @@ async fn main() {
     let home_dir = home_dir.map(PathBuf::from);
 
     // open history file to store commands into history
-    let history = home_dir.clone();
-
-    let mut history = if let Some(mut history) = history {
+    let mut history = if let Some(mut history) = home_dir.clone() {
         history.push(RSHISTORY);
 
         match OpenOptions::new()
@@ -41,9 +39,7 @@ async fn main() {
     };
 
     // run shellrc
-    let shellrc = home_dir.clone();
-
-    if let Some(mut shellrc) = shellrc {
+    if let Some(mut shellrc) = home_dir.clone() {
         shellrc.push(RSHELL_RC);
 
         let shellrc = match tokio::fs::read(shellrc).await {
@@ -55,15 +51,20 @@ async fn main() {
             let mut lines = shellrc.lines();
 
             while let Ok(Some(line)) = lines.next_line().await {
-                let commands = match Command::parse(line.as_str()) {
-                    Ok(command) => command.1,
-                    Err(error) => {
-                        eprintln!("rshell: {error}");
-                        continue;
-                    }
-                };
+                let commands = line.split("&&");
+                let mut parse_results = Vec::new();
 
                 for command in commands {
+                    parse_results.push(match Command::parse(command) {
+                        Ok(command) => command.1,
+                        Err(error) => {
+                            rshell::error!("{error}");
+                            continue;
+                        }
+                    });
+                }
+
+                for command in parse_results {
                     let code = command.interpret().await;
                     if code != 0 {
                         break;
@@ -87,17 +88,22 @@ async fn main() {
             history.write_all(command.as_bytes()).await.unwrap_or(());
         }
 
-        // tokenize command
-        let commands = match Command::parse(command.as_str()) {
-            Ok(tokens) => tokens.1,
-            Err(error) => {
-                eprintln!("rshell: {error}");
-                continue;
-            }
-        };
+        // parse command
+        let commands = command.split("&&");
+        let mut parse_results = Vec::new();
+
+        for command in commands {
+            parse_results.push(match Command::parse(command) {
+                Ok(tokens) => tokens.1,
+                Err(error) => {
+                    rshell::error!("{error}");
+                    continue;
+                }
+            });
+        }
 
         // interpret command
-        for command in commands {
+        for command in parse_results {
             exit_code = command.interpret().await;
             if exit_code != 0 {
                 break;
@@ -136,10 +142,14 @@ fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
         print!("{} ", current_dir.to_str().unwrap_or("/"));
     }
 
-    match exit_code {
-        0 => print!("{}{} ", GREEN_FG, UNICODE_PROMPT),
-        _ => print!("{}{} ", RED_FG, UNICODE_PROMPT),
-    }
+    print!(
+        "{}{} ",
+        match exit_code {
+            0 => GREEN_FG.to_string(),
+            _ => RED_FG.to_string(),
+        },
+        UNICODE_PROMPT
+    );
     print!("{}", RESET_FG);
 
     std::io::stdout().flush().expect("Could not flush.");
@@ -156,7 +166,7 @@ async fn read_command() -> String {
     BufReader::new(io::stdin())
         .read_line(&mut command)
         .await
-        .expect("Failed to read command");
+        .expect("Failed to read line");
 
     command
 }

@@ -3,14 +3,14 @@ use tokio::process;
 
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while, take_while1},
+    bytes::complete::{take_while, take_while1},
     character::complete::{char, space0},
     combinator::opt,
     multi::many_m_n,
     IResult,
 };
 
-use super::{builtin::Builtin, ALIASES};
+use super::{builtin::Builtin, error, ALIASES};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Command {
@@ -38,12 +38,14 @@ impl Command {
     /// # Examples
     ///
     /// ```
+    /// use rshell::error;
+    ///
     /// #[tokio::main]
     /// async fn main() {
     ///     let command = match rshell::command::Command::parse("ls / -a") {
     ///         Ok(result) => result.1[0].clone(),
-    ///         Err(error) => {
-    ///             eprintln!("rshell: {error}");
+    ///         Err(err) => {
+    ///             error!("{err}");
     ///             return;
     ///         }
     ///     };
@@ -51,7 +53,7 @@ impl Command {
     ///     let exit_code = command.interpret().await;
     ///     match exit_code {
     ///         0 => println!("Program executed successfully"),
-    ///         code => eprintln!("Program exited with error code {code}"),
+    ///         code => error!("Program exited with error code {code}"),
     ///     }
     /// }
     /// ```
@@ -71,7 +73,7 @@ impl Command {
                     let alias_lock = match ALIASES.lock() {
                         Ok(lock) => lock,
                         Err(error) => {
-                            eprintln!("rshell: {error}");
+                            error!("{error}");
                             return 1;
                         }
                     };
@@ -94,12 +96,12 @@ impl Command {
                     Ok(mut process) => match process.wait().await {
                         Ok(process) => process.code().unwrap(),
                         Err(error) => {
-                            eprintln!("rshell: {error}");
+                            error!("{error}");
                             2
                         }
                     },
                     Err(error) => {
-                        eprintln!("rshell: {error}");
+                        error!("{error}");
                         3
                     }
                 }
@@ -111,73 +113,49 @@ impl Command {
     ///
     /// # Errors
     ///
-    /// This function will return an error if something went wrong while tokenizing.
-    pub fn parse(i: &str) -> IResult<&str, Vec<Self>> {
+    /// This function will return an error if something went wrong while parsing.
+    pub fn parse(i: &str) -> IResult<&str, Self> {
         // match any whitespace before
-        let (mut i, _) = space0(i)?;
+        let (i, _) = space0(i)?;
 
         // if no command is given
         if i.is_empty() || i == "\n" {
             return Ok((
                 i,
-                vec![Self {
+                Self {
                     keyword: String::new(),
                     args: Vec::new(),
-                }],
+                },
             ));
         }
 
-        let mut commands = Vec::new();
+        let (i, parts) = parts(i)?;
 
-        loop {
-            if i.is_empty() {
-                break;
-            }
-            let (i2, parts1) = parts(i)?;
-            let i2 = i2.trim();
-            let (i2, and) = opt(tag("&&"))(i2)?;
-
-            if and.is_some() {
-                commands.push(parts1);
-                let (i2, parts2) = parts(i2)?;
-                i = i2;
-                commands.push(parts2);
-            } else {
-                i = i2;
-                commands.push(parts1);
-                break;
-            }
-        }
-
-        let commands = commands
+        let parts: Vec<String> = parts
             .iter()
-            .map(|parts| {
-                let parts: Vec<_> = parts
-                    .iter()
-                    .map(|part| {
-                        if let Some(var) = part.strip_prefix("${") {
-                            if let Some(var) = var.strip_suffix('}') {
-                                let (var, default) = var.split_once(":-").unwrap_or((var, ""));
-                                env::var(var).unwrap_or_else(|_| default.to_string())
-                            } else {
-                                String::new()
-                            }
-                        } else if let Some(var) = part.strip_prefix('$') {
-                            env::var(var).unwrap_or_default()
-                        } else {
-                            part.clone()
-                        }
-                    })
-                    .collect();
-
-                Self {
-                    keyword: parts.get(0).unwrap_or(&String::new()).clone(),
-                    args: parts[1..].to_vec(),
+            .map(|part| {
+                if let Some(var) = part.strip_prefix("${") {
+                    if let Some(var) = var.strip_suffix('}') {
+                        let (var, default) = var.split_once(":-").unwrap_or((var, ""));
+                        env::var(var).unwrap_or_else(|_| default.to_string())
+                    } else {
+                        String::new()
+                    }
+                } else if let Some(var) = part.strip_prefix('$') {
+                    env::var(var).unwrap_or_default()
+                } else {
+                    part.clone()
                 }
             })
             .collect();
 
-        Ok((i, commands))
+        Ok((
+            i,
+            Self {
+                keyword: parts[0].clone(),
+                args: parts[1..].to_vec(),
+            },
+        ))
     }
 }
 
@@ -240,10 +218,10 @@ mod command_parse_tests {
             Command::parse("ls / -a"),
             Ok((
                 "",
-                vec![Command {
+                Command {
                     keyword: String::from("ls"),
                     args: vec![String::from("/"), String::from("-a")],
-                }]
+                }
             ))
         );
     }
@@ -254,10 +232,10 @@ mod command_parse_tests {
             Command::parse("\n"),
             Ok((
                 "\n",
-                vec![Command {
+                Command {
                     keyword: String::new(),
                     args: Vec::new()
-                }]
+                }
             ))
         );
     }
@@ -268,10 +246,10 @@ mod command_parse_tests {
             Command::parse(""),
             Ok((
                 "",
-                vec![Command {
+                Command {
                     keyword: String::new(),
                     args: Vec::new()
-                }],
+                },
             ))
         );
     }
@@ -282,30 +260,10 @@ mod command_parse_tests {
             Command::parse("echo $USER"),
             Ok((
                 "",
-                vec![Command {
+                Command {
                     keyword: String::from("echo"),
                     args: vec![env::var("USER").unwrap()],
-                }],
-            ))
-        );
-    }
-
-    #[test]
-    fn test_and() {
-        assert_eq!(
-            Command::parse("echo hello && echo bye;"),
-            Ok((
-                "",
-                vec![
-                    Command {
-                        keyword: String::from("echo"),
-                        args: vec![String::from("hello")],
-                    },
-                    Command {
-                        keyword: String::from("echo"),
-                        args: vec![String::from("bye;")],
-                    }
-                ],
+                },
             ))
         );
     }

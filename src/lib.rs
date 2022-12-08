@@ -9,11 +9,17 @@ pub mod command;
 
 pub use command::Command;
 
+/// Green foreground color.
 pub const GREEN_FG: termion::color::Fg<termion::color::Green> =
     termion::color::Fg(termion::color::Green);
+
+/// Red foreground color.
 pub const RED_FG: termion::color::Fg<termion::color::Red> = termion::color::Fg(termion::color::Red);
+
+/// Reset foreground color.
 pub const RESET_FG: termion::color::Fg<termion::color::Reset> =
     termion::color::Fg(termion::color::Reset);
+
 pub const UNICODE_PROMPT: char = '❯';
 pub const RSHISTORY: &str = ".rshistory";
 pub const RSHELL_RC: &str = ".rshellrc";
@@ -43,8 +49,9 @@ impl Aliases {
     }
 }
 
-impl Default for Aliases {
-    fn default() -> Self {
-        Self::new()
-    }
+#[macro_export]
+macro_rules! error {
+    ($($args:tt)*) => {
+        eprintln!("rshell: {}\r", format_args!($($args)*))
+    };
 }
