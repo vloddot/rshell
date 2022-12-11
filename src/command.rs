@@ -113,7 +113,7 @@ impl Command {
         let mut scanner = Scanner::new(i);
         let tokens = scanner.scan_tokens();
 
-        let parser = Parser::new(tokens);
+        let mut parser = Parser::new(tokens);
         let commands = match parser.parse() {
             Ok(commands) => commands,
             Err(error) => {

@@ -76,7 +76,7 @@ async fn main() {
             Ok(code) => code,
             Err(error) => {
                 rshell::error!("{error}");
-                continue;
+                error.kind().code().into()
             }
         };
     }

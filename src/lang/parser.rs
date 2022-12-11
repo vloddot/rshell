@@ -1,27 +1,55 @@
+use std::env;
+
 use crate::Command;
 
 use super::tokens::{Token, TokenType};
 
+#[derive(Clone, Debug)]
+#[repr(u8)]
 pub enum ErrorKind {
-    UnexpectedToken,
+    UnexpectedToken(Token),
+}
+
+impl ErrorKind {
+    pub fn code(&self) -> u8 {
+        match self {
+            Self::UnexpectedToken(_) => 1,
+        }
+    }
 }
 
 impl std::fmt::Display for ErrorKind {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedToken(token) => {
+                let lexeme = if token.r#type == TokenType::Eof {
+                    "EOF"
+                } else {
+                    token.lexeme.as_str()
+                };
+
+                f.write_fmt(format_args!("unexpected {} token at column {}", lexeme, token.location))
+            }
+        }
     }
 }
 
 pub struct Error {
-    token: TokenType,
+    tokens: &'static [TokenType],
     kind: ErrorKind,
     location: Token,
 }
 
 impl Error {
-    pub fn new(expected_token: TokenType, kind: ErrorKind, location: Token) -> Self {
+    pub fn kind(&self) -> ErrorKind {
+        self.kind.clone()
+    }
+}
+
+impl Error {
+    pub fn new(tokens: &'static [TokenType], kind: ErrorKind, location: Token) -> Self {
         Self {
-            token: expected_token,
+            tokens,
             kind,
             location,
         }
@@ -30,70 +58,160 @@ impl Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
-            ErrorKind::UnexpectedToken => f.write_str(
-                format!(
-                    "Error: {}; expected {:?} after {}",
-                    self.kind, self.token, self.location.lexeme
-                )
-                .as_str(),
-            ),
+        match self.kind.clone() {
+            ErrorKind::UnexpectedToken(token) => {
+                let lexeme = if token.r#type == TokenType::Eof {
+                    "<eof>"
+                } else {
+                    token.lexeme.as_str()
+                };
+
+                f.write_fmt(format_args!(
+                    "{}; expected {:?}, not {:?} after {:?}",
+                    self.kind, self.tokens, lexeme, self.location.lexeme
+                ))
+            }
         }
     }
 }
 
 pub struct Parser {
     tokens: Vec<Token>,
+    current: usize,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens }
+    fn advance(&mut self) {
+        if !self.is_at_end() {
+            self.current += 1;
+        }
     }
 
-    pub fn parse(&self) -> Result<Vec<Command>, Error> {
-        let i = &self.tokens;
-        let (i, parts) = parts(i);
+    fn check(&self, r#type: &TokenType) -> bool {
+        if self.is_at_end() {
+            false
+        } else {
+            &self.peek().r#type == r#type
+        }
+    }
 
-        if parts.is_empty() {
+    fn is_at_end(&self) -> bool {
+        self.peek().r#type == TokenType::Eof
+    }
+
+    pub fn new(tokens: Vec<Token>) -> Self {
+        Self { tokens, current: 0 }
+    }
+
+    pub fn parse(&mut self) -> Result<Vec<Command>, Error> {
+        let mut commands = Vec::new();
+        let mut first_command = Vec::new();
+        for part in &self.tokens[self.current..].to_vec() {
+            if let TokenType::Part = part.r#type {
+                first_command.push(part.lexeme.clone());
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        if first_command.is_empty() {
             return Ok(vec![Command::default()]);
         }
 
-        let next = match i.first() {
-            Some(token) => token,
-            None => return Ok(vec![Command::new(parts[0].clone(), parts[1..].to_vec())]),
-        };
+        loop {
+            let t = self.peek().r#type.clone();
+            self.advance();
+            match t {
+                TokenType::AndAnd => {
+                    let next_token = self.peek_next();
+                    let Some(next_token) = next_token else {
+                        return Err(Error::new(
+                            &[TokenType::Part],
+                            ErrorKind::UnexpectedToken(self.peek().clone()),
+                            self.previous().clone()
+                        ));
+                    };
 
-        match next.r#type {
-            TokenType::AndAnd => todo!(),
-            TokenType::And => todo!(),
-            TokenType::Part => Err(Error::new(
-                TokenType::Part,
-                ErrorKind::UnexpectedToken,
-                i[0].clone(),
-            )),
-            TokenType::Eof => Ok(vec![Command::new(parts[0].clone(), parts[1..].to_vec())]),
-            TokenType::DollarSign => todo!(),
-            TokenType::Pipe => todo!(),
-            TokenType::OrOr => todo!(),
-            TokenType::Semicolon => todo!(),
-            TokenType::LeftBrace => todo!(),
-            TokenType::RightBrace => todo!(),
+                    if next_token.r#type == TokenType::Part {
+                        let other_commands = self.parse()?;
+
+                        for command in other_commands {
+                            commands.push(command);
+                        }
+                    } else {
+                        return Err(Error::new(
+                            &[TokenType::Part],
+                            ErrorKind::UnexpectedToken(self.peek().clone()),
+                            self.previous().clone(),
+                        ));
+                    }
+                }
+
+                TokenType::And => todo!(),
+
+                // another part even though we just looked through all of the parts (usually unreachable)
+                TokenType::Part => {
+                    return Err(Error::new(
+                        &[TokenType::Part],
+                        ErrorKind::UnexpectedToken(self.peek().clone()),
+                        self.previous().clone(),
+                    ))
+                }
+
+                // end of command
+                TokenType::Eof => break,
+
+                TokenType::DollarSign => {
+                    if self.r#match(&TokenType::Part) {
+                        first_command
+                            .push(env::var(self.previous().lexeme.clone()).unwrap_or_default());
+                    } else {
+                        return Err(Error::new(
+                            &[TokenType::Part],
+                            ErrorKind::UnexpectedToken(self.peek().clone()),
+                            self.previous().clone(),
+                        ));
+                    }
+                }
+                TokenType::Pipe => todo!(),
+                TokenType::OrOr => todo!(),
+                TokenType::Semicolon => todo!(),
+                TokenType::LeftBrace => todo!(),
+                TokenType::RightBrace => todo!(),
+            }
+        }
+
+        commands.insert(
+            0,
+            Command::new(first_command[0].clone(), first_command[1..].to_vec()),
+        );
+
+        Ok(commands)
+    }
+
+    fn peek(&self) -> &Token {
+        &self.tokens[self.current]
+    }
+
+    fn peek_next(&self) -> Option<&Token> {
+        if self.is_at_end() {
+            None
+        } else {
+            Some(&self.tokens[self.current + 1])
         }
     }
-}
 
-#[doc(hidden)]
-fn parts(i: &[Token]) -> (Vec<Token>, Vec<String>) {
-    let mut result = Vec::new();
-    let mut input = i.to_vec();
-
-    for part in input.clone() {
-        if let TokenType::Part = part.r#type {
-            result.push(part.lexeme);
-            input.remove(0);
-        }
+    fn previous(&self) -> &Token {
+        &self.tokens[self.current - 1]
     }
 
-    (input, result)
+    fn r#match(&mut self, r#type: &TokenType) -> bool {
+        if self.check(r#type) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
 }

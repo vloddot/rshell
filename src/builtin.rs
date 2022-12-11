@@ -156,7 +156,7 @@ impl Builtin {
     /// Mimics `echo` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/echo.1p.html)
     #[must_use]
     pub fn echo(args: &[String]) -> i32 {
-        println!("{}", args.join(" "));
+        println!("{}", args[1..].join(" "));
         0
     }
 
