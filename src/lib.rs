@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 pub mod builtin;
 pub mod command;
-mod language;
+mod lang;
 
 pub use command::Command;
 
@@ -53,6 +53,6 @@ impl Aliases {
 #[macro_export]
 macro_rules! error {
     ($($args:tt)*) => {
-        eprintln!("rshell: {}\r", format_args!($($args)*))
+        eprintln!("rshell: {}", format_args!($($args)*))
     };
 }

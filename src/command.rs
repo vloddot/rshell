@@ -1,6 +1,6 @@
 use tokio::process;
 
-use crate::language::{
+use crate::lang::{
     parser::{self, Parser},
     scanner::Scanner,
 };

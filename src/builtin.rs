@@ -2,7 +2,14 @@ use crate::error;
 
 use super::ALIASES;
 use async_recursion::async_recursion;
-use std::{env, fmt::Display, io::BufRead, path::PathBuf, str::FromStr};
+use clap::{Arg, ArgAction};
+use std::{
+    env,
+    fmt::Display,
+    io::BufRead,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 pub enum Builtin {
     Alias,
@@ -52,7 +59,7 @@ impl FromStr for Builtin {
             "exit" | "bye" => Ok(Self::Exit),
             "builtin" => Ok(Self::Builtin),
             "history" => Ok(Self::History),
-            "cd" => Ok(Self::Cd),
+            "cd" | "chdir" => Ok(Self::Cd),
             "pwd" => Ok(Self::Pwd),
             command => Err(command.to_string()),
         }
@@ -72,28 +79,29 @@ impl Builtin {
             Err(_) => return 1,
         };
 
+        println!("{:?}", args);
         match args.len() {
-            0 => {
+            1 => {
                 for key in lock.aliases.keys() {
-                    println!("{}='{}'\r", key, lock.get(key).unwrap());
+                    println!("{}='{}'", key, lock.get(key).unwrap());
                 }
                 0
             }
-            1 => {
-                if args[0].contains('=') {
-                    let (key, value) = args[0].split_once('=').unwrap();
+            2 => {
+                if args[1].contains('=') {
+                    let (key, value) = args[1].split_once('=').unwrap();
                     lock.set(key.to_string(), value.to_string());
                     0
                 } else if let Some(value) = lock.get(args[0].clone().as_str()) {
-                    println!("{}='{}'\r", args[0], value);
+                    println!("{}='{}'", args[1], value);
                     0
                 } else {
-                    error!("{} not found", args[0]);
+                    eprintln!("alias: {} not found", args[1]);
                     2
                 }
             }
             _ => {
-                error!("too many arguments");
+                eprintln!("alias: too many arguments");
                 3
             }
         }
@@ -102,7 +110,7 @@ impl Builtin {
     #[async_recursion]
     #[must_use]
     pub async fn builtin(args: &[String]) -> i32 {
-        match Self::run(args).await {
+        match Self::run(&args[1..]).await {
             Ok(result) => result,
             Err(error) => match error.kind {
                 ErrorKind::InvalidBuiltin => {
@@ -117,39 +125,29 @@ impl Builtin {
         }
     }
 
-    /// Runs a builtin if it is one.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the command is not a builtin [`std::io::ErrorKind::InvalidInput`].
-    pub async fn run(args: &[String]) -> Result<i32, Error> {
-        if args.is_empty() {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                String::from("expected 1 argument"),
-            ));
-        }
-
-        match Self::from_str(args[0].as_str()) {
-            Ok(Self::Alias) => Ok(Self::alias(&args[1..])),
-            Ok(Self::Builtin) => Ok(Self::builtin(&args[1..]).await),
-            Ok(Self::Cd) => Ok(Self::cd(&args[1..])),
-            Ok(Self::Echo) => Ok(Self::echo(&args[1..])),
-            Ok(Self::Exit) => Ok(Self::exit(&args[1..])),
-            Ok(Self::History) => Ok(Self::history(&args[1..]).await),
-            Ok(Self::Pwd) => Ok(Self::pwd(&args[1..])),
-            Err(command) => Err(Error::new(ErrorKind::InvalidBuiltin, command)),
-        }
-    }
-
     /// Mimics `cd` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/cd.1p.html)
     #[must_use]
     pub fn cd(args: &[String]) -> i32 {
-        let home_dir = env::var("HOME").unwrap_or_else(|_| "/".to_string());
+        let args = clap::Command::new("cd")
+            .arg(
+                Arg::new("path")
+                    .action(ArgAction::Set)
+                    .value_name("PATH")
+                    .help("The path to change current directory to."),
+            )
+            .get_matches_from(args);
 
-        if let Err(error) = std::env::set_current_dir(args.get(0).unwrap_or(&home_dir)) {
-            error!("{error}");
-            1
+        let home_dir = &env::var("HOME").unwrap_or_else(|_| String::from("/"));
+        let path = Path::new(args.get_one("path").unwrap_or(home_dir));
+
+        if !path.exists() {
+            eprintln!("cd: no such file or directory: {}", path.display());
+            return 1;
+        }
+
+        if let Err(error) = std::env::set_current_dir(path) {
+            eprintln!("cd: {error}");
+            2
         } else {
             0
         }
@@ -158,18 +156,14 @@ impl Builtin {
     /// Mimics `echo` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/echo.1p.html)
     #[must_use]
     pub fn echo(args: &[String]) -> i32 {
-        println!("{}\r", args.join(" "));
+        println!("{}", args.join(" "));
         0
     }
 
     /// Mimics `exit` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man3/exit.3.html)
     #[must_use]
     pub fn exit(args: &[String]) -> i32 {
-        if args.is_empty() {
-            return 0;
-        }
-
-        args[0].parse().unwrap_or(0)
+        args.get(0).unwrap_or(&String::from("0")).parse().unwrap_or(0)
     }
 
     /// Mimics `history` builtin Unix shell command. [Linux man page](https://www.man7.org/linux/man-pages/man3/history.3.html)
@@ -187,7 +181,7 @@ impl Builtin {
         };
 
         for (i, line) in history.lines().enumerate() {
-            println!("{} {}\r", i + 1, line.unwrap());
+            println!("{} {}", i + 1, line.unwrap());
         }
         0
     }
@@ -199,7 +193,32 @@ impl Builtin {
             error!("could not find current directory");
             return 1;
         };
-        println!("{}\r", current_dir.display());
+        println!("{}", current_dir.display());
         0
+    }
+
+    /// Runs a builtin if it is one.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the command is not a builtin [`std::io::ErrorKind::InvalidInput`].
+    pub async fn run(args: &[String]) -> Result<i32, Error> {
+        if args.is_empty() {
+            return Err(Error::new(
+                ErrorKind::InvalidInput,
+                String::from("expected 1 argument"),
+            ));
+        }
+
+        match Self::from_str(args[0].as_str()) {
+            Ok(Self::Alias) => Ok(Self::alias(args)),
+            Ok(Self::Builtin) => Ok(Self::builtin(args).await),
+            Ok(Self::Cd) => Ok(Self::cd(args)),
+            Ok(Self::Echo) => Ok(Self::echo(args)),
+            Ok(Self::Exit) => Ok(Self::exit(args)),
+            Ok(Self::History) => Ok(Self::history(args).await),
+            Ok(Self::Pwd) => Ok(Self::pwd(args)),
+            Err(command) => Err(Error::new(ErrorKind::InvalidBuiltin, command)),
+        }
     }
 }

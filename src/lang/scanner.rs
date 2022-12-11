@@ -1,4 +1,4 @@
-use crate::language::tokens::{Token, TokenType};
+use crate::lang::tokens::{Token, TokenType};
 
 #[derive(Clone)]
 pub struct Scanner {
@@ -22,6 +22,10 @@ impl Scanner {
         self.source.chars().collect::<Vec<_>>()[(self.current - 1) as usize]
     }
 
+    fn is_alphanumeric(c: char) -> bool {
+        c.is_alphanumeric() || vec!['=', '\'', '"', '.', '/'].contains(&c)
+    }
+
     fn is_at_end(&self) -> bool {
         self.current as usize >= self.source.len()
     }
@@ -37,7 +41,7 @@ impl Scanner {
     }
 
     fn part(&mut self) {
-        while self.peek().is_alphanumeric() {
+        while Self::is_alphanumeric(self.peek()) {
             self.advance();
         }
 
@@ -82,7 +86,7 @@ impl Scanner {
             '$' => self.add_token(TokenType::DollarSign),
             '{' => self.add_token(TokenType::LeftBrace),
             '}' => self.add_token(TokenType::RightBrace),
-            ' ' | '\n' | '\t' | 'r' => {}
+            ' ' | '\n' | '\t' | '\r' => {}
             ';' => self.add_token(TokenType::Semicolon),
             _ => self.part(),
         }
