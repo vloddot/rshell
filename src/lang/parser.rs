@@ -28,7 +28,10 @@ impl std::fmt::Display for ErrorKind {
                     token.lexeme.as_str()
                 };
 
-                f.write_fmt(format_args!("unexpected {} token at column {}", lexeme, token.location))
+                f.write_fmt(format_args!(
+                    "unexpected {} token at column {}",
+                    lexeme, token.location
+                ))
             }
         }
     }
@@ -106,18 +109,6 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Vec<Command>, Error> {
         let mut commands = Vec::new();
         let mut first_command = Vec::new();
-        for part in &self.tokens[self.current..].to_vec() {
-            if let TokenType::Part = part.r#type {
-                first_command.push(part.lexeme.clone());
-                self.advance();
-            } else {
-                break;
-            }
-        }
-
-        if first_command.is_empty() {
-            return Ok(vec![Command::default()]);
-        }
 
         loop {
             let t = self.peek().clone();
