@@ -51,24 +51,8 @@ async fn main() {
             let mut lines = shellrc.lines();
 
             while let Ok(Some(line)) = lines.next_line().await {
-                let commands = line.split("&&");
-                let mut parse_results = Vec::new();
-
-                for command in commands {
-                    parse_results.push(match Command::parse(command) {
-                        Ok(command) => command.1,
-                        Err(error) => {
-                            rshell::error!("{error}");
-                            continue;
-                        }
-                    });
-                }
-
-                for command in parse_results {
-                    let code = command.interpret().await;
-                    if code != 0 {
-                        break;
-                    }
+                if let Err(error) = Command::run(line).await {
+                    rshell::error!("{error}");
                 }
             }
         }
@@ -88,27 +72,13 @@ async fn main() {
             history.write_all(command.as_bytes()).await.unwrap_or(());
         }
 
-        // parse command
-        let commands = command.split("&&");
-        let mut parse_results = Vec::new();
-
-        for command in commands {
-            parse_results.push(match Command::parse(command) {
-                Ok(tokens) => tokens.1,
-                Err(error) => {
-                    rshell::error!("{error}");
-                    continue;
-                }
-            });
-        }
-
-        // interpret command
-        for command in parse_results {
-            exit_code = command.interpret().await;
-            if exit_code != 0 {
-                break;
+        exit_code = match Command::run(command).await {
+            Ok(code) => code,
+            Err(error) => {
+                rshell::error!("{error}");
+                continue;
             }
-        }
+        };
     }
 }
 
@@ -119,9 +89,10 @@ async fn main() {
 ///
 /// Looks like this:
 ///     "\[~ if is relative to home directory\]/\[full path\] ❯ (green or red depending on exit code success or failure respectively)"
+///
 /// # Panics
 ///
-/// Panics if flushing wasn't possible.
+/// Panics if the home/current directory wasn't valid UTF-8 or flushing wasn't possible.
 ///
 /// # Examples
 ///
@@ -135,11 +106,11 @@ fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
             "{} ",
             current_dir
                 .to_str()
-                .unwrap_or("/")
-                .replace(home_dir.to_str().unwrap_or("/"), "~")
+                .unwrap()
+                .replace(home_dir.to_str().unwrap(), "~")
         );
     } else {
-        print!("{} ", current_dir.to_str().unwrap_or("/"));
+        print!("{} ", current_dir.to_str().unwrap());
     }
 
     print!(

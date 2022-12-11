@@ -6,6 +6,7 @@ use std::sync::Mutex;
 
 pub mod builtin;
 pub mod command;
+mod language;
 
 pub use command::Command;
 

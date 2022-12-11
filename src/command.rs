@@ -1,18 +1,13 @@
-use std::env;
 use tokio::process;
 
-use nom::{
-    branch::alt,
-    bytes::complete::{take_while, take_while1},
-    character::complete::{char, space0},
-    combinator::opt,
-    multi::many_m_n,
-    IResult,
+use crate::language::{
+    parser::{self, Parser},
+    scanner::Scanner,
 };
 
 use super::{builtin::Builtin, error, ALIASES};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct Command {
     pub keyword: String,
     pub args: Vec<String>,
@@ -109,162 +104,35 @@ impl Command {
         }
     }
 
-    /// This function parses a string and returns a [`Result<(&str, Command), nom::Err<nom::error::Error>>`]
+    /// Runs a command from a string.
     ///
     /// # Errors
     ///
-    /// This function will return an error if something went wrong while parsing.
-    pub fn parse(i: &str) -> IResult<&str, Self> {
-        // match any whitespace before
-        let (i, _) = space0(i)?;
+    /// This function will return an error if parsing with nom throws an error.
+    pub async fn run(i: String) -> Result<i32, parser::Error> {
+        let mut scanner = Scanner::new(i);
+        let tokens = scanner.scan_tokens();
 
-        // if no command is given
-        if i.is_empty() || i == "\n" {
-            return Ok((
-                i,
-                Self {
-                    keyword: String::new(),
-                    args: Vec::new(),
-                },
-            ));
+        let parser = Parser::new(tokens);
+        let commands = match parser.parse() {
+            Ok(commands) => commands,
+            Err(error) => {
+                return Err(error);
+            }
+        };
+
+        for command in commands {
+            let exit_code = command.interpret().await;
+            if exit_code != 0 {
+                return Ok(exit_code);
+            }
         }
 
-        let (i, parts) = parts(i)?;
-
-        let parts: Vec<String> = parts
-            .iter()
-            .map(|part| {
-                if let Some(var) = part.strip_prefix("${") {
-                    if let Some(var) = var.strip_suffix('}') {
-                        let (var, default) = var.split_once(":-").unwrap_or((var, ""));
-                        env::var(var).unwrap_or_else(|_| default.to_string())
-                    } else {
-                        String::new()
-                    }
-                } else if let Some(var) = part.strip_prefix('$') {
-                    env::var(var).unwrap_or_default()
-                } else {
-                    part.clone()
-                }
-            })
-            .collect();
-
-        Ok((
-            i,
-            Self {
-                keyword: parts[0].clone(),
-                args: parts[1..].to_vec(),
-            },
-        ))
-    }
-}
-
-#[doc(hidden)]
-fn parts(i: &str) -> IResult<&str, Vec<String>> {
-    let mut result = vec![];
-    let mut i = i;
-
-    while let (i2, Some(part)) = opt(string)(i)? {
-        result.push(part);
-        i = i2;
+        Ok(0)
     }
 
-    Ok((i, result))
-}
-
-#[doc(hidden)]
-fn string(i: &str) -> IResult<&str, String> {
-    let (i, _) = space0(i)?;
-
-    let (i, result) = many_m_n(
-        1,
-        usize::MAX,
-        alt((plain_string, single_quoted_string, double_quoted_string)),
-    )(i)?;
-
-    Ok((i, result.join("")))
-}
-
-#[doc(hidden)]
-fn plain_string(i: &str) -> IResult<&str, &str> {
-    take_while1(|c| !vec!['\'', '"', ' ', '\r', '\n', '&'].contains(&c))(i)
-}
-
-#[doc(hidden)]
-fn single_quoted_string(i: &str) -> IResult<&str, &str> {
-    let (i, _) = char('\'')(i)?;
-    let (i, result) = take_while(|c| !vec!['\''].contains(&c))(i)?;
-    let (i, _) = char('\'')(i)?;
-
-    Ok((i, result))
-}
-
-#[doc(hidden)]
-fn double_quoted_string(i: &str) -> IResult<&str, &str> {
-    let (i, _) = char('"')(i)?;
-    let (i, result) = take_while(|c| !vec!['"'].contains(&c))(i)?;
-    let (i, _) = char('"')(i)?;
-
-    Ok((i, result))
-}
-
-#[cfg(test)]
-mod command_parse_tests {
-    use super::*;
-
-    #[test]
-    fn test_simple_command() {
-        assert_eq!(
-            Command::parse("ls / -a"),
-            Ok((
-                "",
-                Command {
-                    keyword: String::from("ls"),
-                    args: vec![String::from("/"), String::from("-a")],
-                }
-            ))
-        );
-    }
-
-    #[test]
-    fn test_newline() {
-        assert_eq!(
-            Command::parse("\n"),
-            Ok((
-                "\n",
-                Command {
-                    keyword: String::new(),
-                    args: Vec::new()
-                }
-            ))
-        );
-    }
-
-    #[test]
-    fn test_empty() {
-        assert_eq!(
-            Command::parse(""),
-            Ok((
-                "",
-                Command {
-                    keyword: String::new(),
-                    args: Vec::new()
-                },
-            ))
-        );
-    }
-
-    #[test]
-    fn test_variables() {
-        assert_eq!(
-            Command::parse("echo $USER"),
-            Ok((
-                "",
-                Command {
-                    keyword: String::from("echo"),
-                    args: vec![env::var("USER").unwrap()],
-                },
-            ))
-        );
+    #[must_use]
+    pub fn new(keyword: String, args: Vec<String>) -> Self {
+        Self { keyword, args }
     }
 }
