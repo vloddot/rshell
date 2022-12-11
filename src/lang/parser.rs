@@ -23,15 +23,12 @@ impl std::fmt::Display for ErrorKind {
         match self {
             Self::UnexpectedToken(token) => {
                 let lexeme = if token.r#type == TokenType::Eof {
-                    "EOF"
+                    "<eof>"
                 } else {
                     token.lexeme.as_str()
                 };
 
-                f.write_fmt(format_args!(
-                    "unexpected {} token at column {}",
-                    lexeme, token.location
-                ))
+                f.write_fmt(format_args!("unexpected {:?} token", lexeme))
             }
         }
     }
@@ -115,31 +112,33 @@ impl Parser {
             self.advance();
             match t.r#type {
                 TokenType::AndAnd => {
-                    let next_token = self.peek_next();
-                    let Some(next_token) = next_token else {
-                        return Err(Error::new(
-                            &[TokenType::Part],
-                            ErrorKind::UnexpectedToken(self.peek().clone()),
-                            self.previous().clone()
-                        ));
-                    };
+                    let next_token = self.peek();
 
-                    if next_token.r#type == TokenType::Part {
-                        let other_commands = self.parse()?;
-
-                        for command in other_commands {
-                            commands.push(command);
-                        }
-                    } else {
+                    if vec![
+                        TokenType::Pipe,
+                        TokenType::And,
+                        TokenType::AndAnd,
+                        TokenType::Eof,
+                        TokenType::OrOr,
+                        TokenType::Semicolon,
+                    ]
+                    .contains(&next_token.r#type)
+                    {
                         return Err(Error::new(
                             &[TokenType::Part],
                             ErrorKind::UnexpectedToken(self.peek().clone()),
                             self.previous().clone(),
                         ));
                     }
+
+                    let other_commands = self.parse()?;
+
+                    for command in other_commands {
+                        commands.push(command);
+                    }
                 }
 
-                TokenType::And => todo!(),
+                TokenType::And => unimplemented!(),
 
                 TokenType::Part => {
                     first_command.push(t.lexeme);
@@ -150,8 +149,8 @@ impl Parser {
 
                 TokenType::DollarSign => {
                     if self.r#match(&TokenType::Part) {
-                        first_command
-                            .push(env::var(self.previous().lexeme.clone()).unwrap_or_default());
+                        let previous = self.previous().lexeme.clone();
+                        first_command.push(env::var(previous).unwrap_or_default());
                     } else {
                         return Err(Error::new(
                             &[TokenType::Part],
@@ -160,11 +159,11 @@ impl Parser {
                         ));
                     }
                 }
-                TokenType::Pipe => todo!(),
-                TokenType::OrOr => todo!(),
-                TokenType::Semicolon => todo!(),
-                TokenType::LeftBrace => todo!(),
-                TokenType::RightBrace => todo!(),
+                TokenType::Pipe => unimplemented!(),
+                TokenType::OrOr => unimplemented!(),
+                TokenType::Semicolon => unimplemented!(),
+                TokenType::LeftBrace => unimplemented!(),
+                TokenType::RightBrace => unimplemented!(),
             }
         }
 
@@ -178,14 +177,6 @@ impl Parser {
 
     fn peek(&self) -> &Token {
         &self.tokens[self.current]
-    }
-
-    fn peek_next(&self) -> Option<&Token> {
-        if self.is_at_end() {
-            None
-        } else {
-            Some(&self.tokens[self.current + 1])
-        }
     }
 
     fn previous(&self) -> &Token {
