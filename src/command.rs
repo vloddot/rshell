@@ -2,10 +2,10 @@ use tokio::process;
 
 use crate::lang::{
     parser::{self, Parser},
-    scanner::Scanner,
+    scanner::Scanner, builtin::Builtin,
 };
 
-use super::{builtin::Builtin, error, ALIASES};
+use super::{error, ALIASES};
 
 #[derive(Clone, Debug, Default)]
 pub struct Command {

@@ -1,6 +1,6 @@
 use crate::error;
 
-use super::ALIASES;
+use crate::ALIASES;
 use async_recursion::async_recursion;
 use clap::{Arg, ArgAction};
 use std::{

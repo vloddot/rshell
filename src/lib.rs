@@ -4,7 +4,6 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-pub mod builtin;
 pub mod command;
 mod lang;
 
