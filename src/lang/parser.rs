@@ -120,9 +120,9 @@ impl Parser {
         }
 
         loop {
-            let t = self.peek().r#type.clone();
+            let t = self.peek().clone();
             self.advance();
-            match t {
+            match t.r#type {
                 TokenType::AndAnd => {
                     let next_token = self.peek_next();
                     let Some(next_token) = next_token else {
@@ -150,13 +150,8 @@ impl Parser {
 
                 TokenType::And => todo!(),
 
-                // another part even though we just looked through all of the parts (usually unreachable)
                 TokenType::Part => {
-                    return Err(Error::new(
-                        &[TokenType::Part],
-                        ErrorKind::UnexpectedToken(self.peek().clone()),
-                        self.previous().clone(),
-                    ))
+                    first_command.push(t.lexeme);
                 }
 
                 // end of command
