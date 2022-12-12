@@ -29,6 +29,7 @@ pub enum TokenType {
     Semicolon,
     LeftBrace,
     RightBrace,
+    ColonDash,
 }
 
 impl Default for TokenType {

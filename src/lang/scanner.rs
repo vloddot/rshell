@@ -87,6 +87,11 @@ impl Scanner {
             '{' => self.add_token(TokenType::LeftBrace),
             '}' => self.add_token(TokenType::RightBrace),
             ' ' | '\n' | '\t' | '\r' => {}
+            ':' => {
+                if self.r#match('-') {
+                    self.add_token(TokenType::ColonDash);
+                }
+            }
             ';' => self.add_token(TokenType::Semicolon),
             _ => self.part(),
         }

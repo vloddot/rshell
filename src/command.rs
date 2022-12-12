@@ -1,11 +1,14 @@
 use tokio::process;
 
-use crate::lang::{
-    parser::{self, Parser},
-    scanner::Scanner, builtin::Builtin,
+use crate::{
+    error,
+    lang::{
+        builtin::Builtin,
+        parser::{self, Parser},
+        scanner::Scanner,
+    },
+    ALIASES,
 };
-
-use super::{error, ALIASES};
 
 #[derive(Clone, Debug, Default)]
 pub struct Command {
@@ -14,7 +17,7 @@ pub struct Command {
 }
 
 impl Command {
-    /// Interprets this shell-like [`Command`] based on the keyword and arguments.
+    /// Interprets self ([`Command`]) based on its keyword and arguments.
     ///
     /// Returns the exit code of the process.
     ///
@@ -26,32 +29,9 @@ impl Command {
     ///
     /// This function returns the exit code of the process being executed.
     ///
-    /// If the command is a key inside of the [`rshell::ALIASES`]. It executes the aliased command.
+    /// If the command is a key inside of the `rshell::ALIASES`. It executes the aliased command.
     ///
     /// This function is asynchronous so that it can run asynchronous processess
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use rshell::error;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let command = match rshell::command::Command::parse("ls / -a") {
-    ///         Ok(result) => result.1[0].clone(),
-    ///         Err(err) => {
-    ///             error!("{err}");
-    ///             return;
-    ///         }
-    ///     };
-    ///
-    ///     let exit_code = command.interpret().await;
-    ///     match exit_code {
-    ///         0 => println!("Program executed successfully"),
-    ///         code => error!("Program exited with error code {code}"),
-    ///     }
-    /// }
-    /// ```
     pub async fn interpret(&self) -> i32 {
         let mut args = vec![self.keyword.clone()];
         args.extend(self.args.clone());
@@ -86,7 +66,6 @@ impl Command {
                     .args(self.args.clone())
                     .spawn();
 
-                // Wait for the command to run.
                 match process {
                     Ok(mut process) => match process.wait().await {
                         Ok(process) => process.code().unwrap(),
@@ -104,11 +83,16 @@ impl Command {
         }
     }
 
+    #[must_use]
+    pub fn new(keyword: String, args: Vec<String>) -> Self {
+        Self { keyword, args }
+    }
+
     /// Runs a command from a string.
     ///
     /// # Errors
     ///
-    /// This function will return an error if parsing with nom throws an error.
+    /// This function will return an error if parsing throws an error.
     pub async fn run(i: String) -> Result<i32, parser::Error> {
         let mut scanner = Scanner::new(i);
         let tokens = scanner.scan_tokens();
@@ -129,10 +113,5 @@ impl Command {
         }
 
         Ok(0)
-    }
-
-    #[must_use]
-    pub fn new(keyword: String, args: Vec<String>) -> Self {
-        Self { keyword, args }
     }
 }
