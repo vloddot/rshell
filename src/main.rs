@@ -51,7 +51,7 @@ async fn main() {
             let mut lines = shellrc.lines();
 
             while let Ok(Some(line)) = lines.next_line().await {
-                if let Err(error) = Command::run(line).await {
+                if let Err(error) = Command::run(&line).await {
                     rshell::error!("{error}");
                 }
             }
@@ -72,7 +72,7 @@ async fn main() {
             history.write_all(command.as_bytes()).await.unwrap_or(());
         }
 
-        exit_code = match Command::run(command).await {
+        exit_code = match Command::run(&command).await {
             Ok(code) => code,
             Err(error) => {
                 rshell::error!("{error}");

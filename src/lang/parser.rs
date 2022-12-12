@@ -174,48 +174,52 @@ impl Parser {
                 // end of command
                 TokenType::Eof => break,
 
-                TokenType::DollarSign => match self.peek().r#type {
-                    TokenType::Part => {
-                        let var = self.advance().lexeme.clone();
-                        first_command.push(env::var(var).unwrap_or_default());
-                    }
-                    TokenType::LeftBrace => {
-                        if !self.match_next(&TokenType::Part) {
-                            return Err(Error::new(
-                                &[TokenType::Part],
-                                ErrorKind::UnexpectedToken(self.peek().clone()),
-                                self.previous().clone(),
-                            ));
-                        }
-
-                        let var = self.advance().lexeme.clone();
-
-                        // If there is syntax like this: "echo ${HOME:-false}"
-                        if self.r#match(&TokenType::ColonDash) && self.r#match(&TokenType::Part) {
-                            first_command.push(
-                                env::var(var).unwrap_or_else(|_| self.previous().lexeme.clone()),
-                            );
-                        } else {
+                TokenType::DollarSign => {
+                    let t = self.peek().clone();
+                    match t.r#type {
+                        TokenType::Part => {
+                            let var = self.advance().lexeme.clone();
                             first_command.push(env::var(var).unwrap_or_default());
                         }
+                        TokenType::LeftBrace => {
+                            if !self.match_next(&TokenType::Part) {
+                                return Err(Error::new(
+                                    &[TokenType::Part],
+                                    ErrorKind::UnexpectedToken(t),
+                                    self.previous().clone(),
+                                ));
+                            }
 
-                        if !self.check(&TokenType::RightBrace) {
-                            return Err(Error::new(
-                                &[],
-                                ErrorKind::RequiredTokenNotFound(TokenType::RightBrace),
-                                self.previous().clone(),
-                            ));
+                            let var = self.advance().lexeme.clone();
+
+                            // If there is syntax like this: "echo ${HOME:-false}"
+                            if self.r#match(&TokenType::ColonDash) && self.r#match(&TokenType::Part)
+                            {
+                                first_command.push(
+                                    env::var(var)
+                                        .unwrap_or_else(|_| self.previous().lexeme.clone()),
+                                );
+                            } else {
+                                first_command.push(env::var(var).unwrap_or_default());
+                            }
+
+                            if !self.r#match(&TokenType::RightBrace) {
+                                return Err(Error::new(
+                                    &[],
+                                    ErrorKind::RequiredTokenNotFound(TokenType::RightBrace),
+                                    self.previous().clone(),
+                                ));
+                            }
                         }
-                        self.advance();
+                        _ => {
+                            return Err(Error::new(
+                                &[TokenType::Part, TokenType::LeftBrace],
+                                ErrorKind::UnexpectedToken(t),
+                                self.previous().clone(),
+                            ))
+                        }
                     }
-                    _ => {
-                        return Err(Error::new(
-                            &[TokenType::Part, TokenType::LeftBrace],
-                            ErrorKind::UnexpectedToken(self.peek().clone()),
-                            self.previous().clone(),
-                        ))
-                    }
-                },
+                }
                 TokenType::Pipe => unimplemented!(),
                 TokenType::OrOr => unimplemented!(),
                 TokenType::Semicolon => unimplemented!(),

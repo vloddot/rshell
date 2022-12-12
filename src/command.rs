@@ -7,7 +7,6 @@ use crate::{
         parser::{self, Parser},
         scanner::Scanner,
     },
-    ALIASES,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -44,24 +43,6 @@ impl Command {
                     return 0;
                 }
 
-                let command = {
-                    let alias_lock = match ALIASES.lock() {
-                        Ok(lock) => lock,
-                        Err(error) => {
-                            error!("{error}");
-                            return 1;
-                        }
-                    };
-
-                    let alias = alias_lock.get(command.clone().as_str());
-
-                    if let Some(alias) = alias {
-                        alias.to_string()
-                    } else {
-                        command
-                    }
-                };
-
                 let process = process::Command::new(command)
                     .args(self.args.clone())
                     .spawn();
@@ -93,7 +74,7 @@ impl Command {
     /// # Errors
     ///
     /// This function will return an error if parsing throws an error.
-    pub async fn run(i: String) -> Result<i32, parser::Error> {
+    pub async fn run(i: &str) -> Result<i32, parser::Error> {
         let mut scanner = Scanner::new(i);
         let tokens = scanner.scan_tokens();
 
