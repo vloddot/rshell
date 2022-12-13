@@ -20,3 +20,5 @@ Keys like right arrows and CTRL+L are handled as any normal terminal app does.
 - or (||) syntax
 - pipe (|) syntax
 - semicolon (;) syntax
+- block ({ ls }) syntax
+
