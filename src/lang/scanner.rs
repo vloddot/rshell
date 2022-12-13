@@ -1,6 +1,8 @@
+use std::env;
+
 use crate::{
     lang::tokens::{Token, TokenType},
-    ALIASES,
+    ALIASES, PREVIOUS_EXIT_CODE,
 };
 
 #[derive(Clone)]
@@ -45,12 +47,14 @@ impl Scanner {
         }
     }
 
-    fn part(&mut self) {
+    async fn part(&mut self, start: usize) {
         let mut inside_quotes = false;
         let mut c = self.peek();
+
         while Self::is_part(c) || (inside_quotes && c == ' ') {
             self.advance();
             c = self.peek();
+
             inside_quotes = if vec!['\'', '"'].contains(&c) || inside_quotes {
                 true
             } else {
@@ -58,9 +62,9 @@ impl Scanner {
             };
         }
 
-        let text: String = self.source[self.start..self.current].iter().collect();
+        let text: String = self.source[start..self.current].iter().collect();
 
-        let alias_lock = ALIASES.lock().unwrap();
+        let alias_lock = ALIASES.lock().await;
 
         if let Some(value) = alias_lock.get(text.as_str()) {
             self.add_token_with_lexeme(TokenType::Part, value.to_string());
@@ -68,6 +72,32 @@ impl Scanner {
         }
 
         self.add_token(TokenType::Part);
+    }
+
+    async fn part_return_lexeme(&mut self, start: usize) -> String {
+        let mut inside_quotes = false;
+        let mut c = self.peek();
+
+        while Self::is_part(c) || (inside_quotes && c == ' ') {
+            self.advance();
+            c = self.peek();
+
+            inside_quotes = if vec!['\'', '"'].contains(&c) || inside_quotes {
+                true
+            } else {
+                vec!['\'', '"'].contains(&c) && !inside_quotes
+            };
+        }
+
+        let text: String = self.source[start..self.current].iter().collect();
+
+        let alias_lock = ALIASES.lock().await;
+
+        if let Some(value) = alias_lock.get(text.as_str()) {
+            value.to_string()
+        } else {
+            text
+        }
     }
 
     fn peek(&self) -> char {
@@ -87,10 +117,8 @@ impl Scanner {
         }
     }
 
-    fn scan_token(&mut self) {
-        let c = self.advance();
-
-        match c {
+    async fn scan_token(&mut self) {
+        match self.advance() {
             '&' => {
                 if self.r#match('&') {
                     self.add_token(TokenType::AndAnd);
@@ -105,7 +133,14 @@ impl Scanner {
                     self.add_token(TokenType::Pipe);
                 }
             }
-            '$' => self.add_token(TokenType::DollarSign),
+            '$' => {
+                if self.r#match('?') {
+                    let previous_exit_code = *PREVIOUS_EXIT_CODE.lock().await;
+                    self.add_token_with_lexeme(TokenType::Part, previous_exit_code.to_string());
+                    return;
+                }
+                self.add_token(TokenType::DollarSign);
+            }
             '{' => self.add_token(TokenType::LeftBrace),
             '}' => self.add_token(TokenType::RightBrace),
             ' ' | '\n' | '\t' | '\r' => {}
@@ -114,15 +149,28 @@ impl Scanner {
                     self.add_token(TokenType::ColonDash);
                 }
             }
+            '~' => {
+                let text = format!(
+                    "{}{}",
+                    env::var("HOME").unwrap(),
+                    if Self::is_part(self.advance()) {
+                        self.part_return_lexeme(self.start + 1).await
+                    } else {
+                        String::new()
+                    }
+                );
+
+                self.add_token_with_lexeme(TokenType::Part, text);
+            }
             ';' => self.add_token(TokenType::Semicolon),
-            _ => self.part(),
+            _ => self.part(self.start).await,
         }
     }
 
-    pub fn scan_tokens(&mut self) -> Vec<Token> {
+    pub async fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token();
+            self.scan_token().await;
         }
 
         // EOF

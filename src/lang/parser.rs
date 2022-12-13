@@ -135,6 +135,14 @@ impl Parser {
         let mut commands = Vec::new();
         let mut first_command = Vec::new();
 
+        // EOF token (could be a CTRL+D or just empty command).
+        if self.is_at_end() {
+            return Ok(vec![Command {
+                keyword: String::new(),
+                args: Vec::new(),
+            }]);
+        }
+
         while !self.is_at_end() {
             let t = self.advance().clone();
             match t.r#type {

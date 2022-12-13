@@ -1,5 +1,3 @@
-use tokio::process;
-
 use crate::{
     error,
     lang::{
@@ -31,7 +29,7 @@ impl Command {
     /// If the command is a key inside of the `rshell::ALIASES`. It executes the aliased command.
     ///
     /// This function is asynchronous so that it can run asynchronous processess
-    pub async fn interpret(&self) -> i32 {
+    async fn interpret(&self) -> i32 {
         let mut args = vec![self.keyword.clone()];
         args.extend(self.args.clone());
         let args = args.as_slice();
@@ -43,7 +41,7 @@ impl Command {
                     return 0;
                 }
 
-                let process = process::Command::new(command)
+                let process = tokio::process::Command::new(command)
                     .args(self.args.clone())
                     .spawn();
 
@@ -74,9 +72,9 @@ impl Command {
     /// # Errors
     ///
     /// This function will return an error if parsing throws an error.
-    pub async fn run(i: &str) -> Result<i32, parser::Error> {
-        let mut scanner = Scanner::new(i);
-        let tokens = scanner.scan_tokens();
+    pub async fn run(command: &str) -> Result<i32, parser::Error> {
+        let mut scanner = Scanner::new(command);
+        let tokens = scanner.scan_tokens().await;
 
         let mut parser = Parser::new(tokens);
         let commands = match parser.parse() {

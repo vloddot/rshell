@@ -1,4 +1,10 @@
-use rshell::{Command, GREEN_FG, RED_FG, RESET_FG, RSHELL_RC, RSHISTORY, UNICODE_PROMPT};
+use rshell::{
+    Command, GREEN_FG, PREVIOUS_EXIT_CODE, RED_FG, RESET_FG, RSHELL_RC, RSHISTORY, UNICODE_PROMPT,
+};
+use signal_hook::{
+    consts::{SIGINT, SIGTERM},
+    iterator::Signals,
+};
 
 use std::{
     env,
@@ -11,8 +17,17 @@ use tokio::{
     io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
 };
 
+#[derive(Debug)]
+struct CtrlC;
+
+impl std::fmt::Display for CtrlC {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Keyboard interrupt")
+    }
+}
+
 #[tokio::main]
-async fn main() {
+async fn main() -> io::Result<()> {
     // get home directory
     let home_dir = match env::var("HOME") {
         Ok(dir) => Some(dir),
@@ -58,12 +73,23 @@ async fn main() {
         }
     }
 
-    let mut exit_code = 0;
+    let mut signals = Signals::new([SIGINT, SIGTERM])?;
 
-    loop {
+    'main_loop: loop {
+        for signal in signals.pending() {
+            match signal {
+                SIGINT => {
+                    *PREVIOUS_EXIT_CODE.lock().await = 130;
+                    continue 'main_loop;
+                }
+                SIGTERM => break 'main_loop,
+                _ => unreachable!(),
+            }
+        }
+
         let current_dir = env::current_dir().expect("Current directory not found.");
 
-        print_prompt(exit_code, home_dir.as_deref(), &current_dir);
+        print_prompt(*PREVIOUS_EXIT_CODE.lock().await, home_dir.as_deref(), &current_dir);
 
         let command = read_command().await;
 
@@ -72,14 +98,18 @@ async fn main() {
             history.write_all(command.as_bytes()).await.unwrap_or(());
         }
 
-        exit_code = match Command::run(&command).await {
+        let code = match Command::run(&command).await {
             Ok(code) => code,
             Err(error) => {
                 rshell::error!("{error}");
                 error.kind().code().into()
             }
         };
+
+        *PREVIOUS_EXIT_CODE.lock().await = code;
     }
+
+    Ok(())
 }
 
 /// Prints the shell prompt given the previous command's exit code, home directory
@@ -131,13 +161,23 @@ fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
 /// # Panics
 ///
 /// Panics if the `BufReader` couldn't read from stdin.
+///
+/// # Exits Program
+///
+/// Exits the program if the character given is an EOF character (CTRL+D).
 async fn read_command() -> String {
     let mut command = String::new();
 
-    BufReader::new(io::stdin())
+    let bytes = BufReader::new(io::stdin())
         .read_line(&mut command)
         .await
         .expect("Failed to read line");
+
+    // EOF reached.
+    if bytes == 0 {
+        println!();
+        std::process::exit(0);
+    }
 
     command
 }

@@ -72,14 +72,9 @@ impl Builtin {
     /// # Panics
     ///
     /// Panics if the alias lock could not be obtained.
-    #[must_use]
-    pub fn alias(args: &[String]) -> i32 {
-        let mut lock = match ALIASES.lock() {
-            Ok(lock) => lock,
-            Err(_) => return 1,
-        };
+    pub async fn alias(args: &[String]) -> i32 {
+        let mut lock = ALIASES.lock().await;
 
-        println!("{:?}", args);
         match args.len() {
             1 => {
                 for key in lock.aliases.keys() {
@@ -135,19 +130,24 @@ impl Builtin {
                     .value_name("PATH")
                     .help("The path to change current directory to."),
             )
-            .get_matches_from(args);
+            .try_get_matches_from(args);
+
+        let Ok(args) = args else {
+            eprintln!("cd: invalid args\n\nUsage: cd [PATH]");
+            return 1;
+        };
 
         let home_dir = &env::var("HOME").unwrap_or_else(|_| String::from("/"));
         let path = Path::new(args.get_one("path").unwrap_or(home_dir));
 
         if !path.exists() {
             eprintln!("cd: no such file or directory: {}", path.display());
-            return 1;
+            return 2;
         }
 
         if let Err(error) = std::env::set_current_dir(path) {
             eprintln!("cd: {error}");
-            2
+            3
         } else {
             0
         }
@@ -163,7 +163,10 @@ impl Builtin {
     /// Mimics `exit` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man3/exit.3.html)
     #[must_use]
     pub fn exit(args: &[String]) -> i32 {
-        args.get(0).unwrap_or(&String::from("0")).parse().unwrap_or(0)
+        args.get(0)
+            .unwrap_or(&String::from("0"))
+            .parse()
+            .unwrap_or(0)
     }
 
     /// Mimics `history` builtin Unix shell command. [Linux man page](https://www.man7.org/linux/man-pages/man3/history.3.html)
@@ -211,7 +214,7 @@ impl Builtin {
         }
 
         match Self::from_str(args[0].as_str()) {
-            Ok(Self::Alias) => Ok(Self::alias(args)),
+            Ok(Self::Alias) => Ok(Self::alias(args).await),
             Ok(Self::Builtin) => Ok(Self::builtin(args).await),
             Ok(Self::Cd) => Ok(Self::cd(args)),
             Ok(Self::Echo) => Ok(Self::echo(args)),

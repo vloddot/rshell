@@ -13,3 +13,4 @@ tokio = { version = "1.22.0", features = ["full"] }
 async-recursion = "1.0.0"
 itertools = "0.10.5"
 clap = { version = "4.0.29", features = ["derive"] }
+signal-hook = "0.3.14"

@@ -1,9 +1,9 @@
 #![warn(clippy::all, clippy::pedantic, clippy::style, clippy::use_self)]
 
 use lazy_static::lazy_static;
+use tokio::sync::Mutex;
 use std::collections::HashMap;
 use std::env;
-use std::sync::Mutex;
 
 pub mod command;
 mod lang;
@@ -27,6 +27,10 @@ pub const RSHELL_RC: &str = ".rshellrc";
 
 lazy_static! {
     pub static ref ALIASES: Mutex<Aliases> = Mutex::new(Aliases::new());
+}
+
+lazy_static! {
+    pub static ref PREVIOUS_EXIT_CODE: Mutex<i32> = Mutex::new(0);
 }
 
 pub struct Aliases {
