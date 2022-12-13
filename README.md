@@ -15,3 +15,8 @@ because we want to listen to SIGINTs and such:
 
 ### Specific Keys
 Keys like right arrows and CTRL+L are handled as any normal terminal app does.
+
+## Unsupported Features
+- or (||) syntax
+- pipe (|) syntax
+- semicolon (;) syntax
