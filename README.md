@@ -3,16 +3,6 @@ An open source shell written in Rust. Made for simplicity.
 
 This shell is still in beta. It is not recommended for personal use currently.
 Pull requests are allowed.
-## Index
-
-### [command.rs](src/command.rs)
-High level Command spawning is handled here.
-
-### [builtin.rs](src/builtin.rs)
-This is where all the shell builtins are created.
-
-### [lang](src/lang/mod.rs)
-Scanning and parsing commands is handled in this module.
 
 ## Known Issues
 
