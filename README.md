@@ -3,7 +3,6 @@
 An open source shell written in Rust. Made for simplicity.
 
 This shell is still in beta. It is not recommended for personal use currently.
-Pull requests are allowed.
 
 ## Known Issues
 
