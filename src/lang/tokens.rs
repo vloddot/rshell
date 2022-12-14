@@ -37,3 +37,21 @@ impl Default for TokenType {
         Self::Eof
     }
 }
+
+impl std::fmt::Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::AndAnd => "'&&'",
+            Self::And => "'&'",
+            Self::Part => "identifier",
+            Self::DollarSign => "'$'",
+            Self::Pipe => "'|'",
+            Self::OrOr => "'||'",
+            Self::Eof => "<eof>",
+            Self::Semicolon => "';'",
+            Self::LeftBrace => "'{'",
+            Self::RightBrace => "'}'",
+            Self::ColonDash => "':-'",
+        })
+    }
+}

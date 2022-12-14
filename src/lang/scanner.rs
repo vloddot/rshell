@@ -1,12 +1,10 @@
-use std::env;
-
 use crate::{
     lang::tokens::{Token, TokenType},
     ALIASES, PREVIOUS_EXIT_CODE,
 };
 
 #[derive(Clone)]
-pub struct Scanner {
+pub(crate) struct Scanner {
     start: usize,
     current: usize,
     tokens: Vec<Token>,
@@ -30,7 +28,7 @@ impl Scanner {
     }
 
     fn is_at_end(&self) -> bool {
-        self.current as usize >= self.source.len()
+        self.current >= self.source.len()
     }
 
     fn is_part(c: char) -> bool {
@@ -38,7 +36,7 @@ impl Scanner {
     }
 
     #[must_use]
-    pub fn new(source: &str) -> Self {
+    pub(crate) fn new(source: &str) -> Self {
         Self {
             start: 0,
             current: 0,
@@ -152,7 +150,7 @@ impl Scanner {
             '~' => {
                 let text = format!(
                     "{}{}",
-                    env::var("HOME").unwrap(),
+                    std::env::var("HOME").unwrap_or_default(),
                     if Self::is_part(self.advance()) {
                         self.part_return_lexeme(self.start + 1).await
                     } else {
@@ -167,7 +165,7 @@ impl Scanner {
         }
     }
 
-    pub async fn scan_tokens(&mut self) -> Vec<Token> {
+    pub(crate) async fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token().await;

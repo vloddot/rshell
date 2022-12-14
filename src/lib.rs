@@ -1,9 +1,9 @@
 #![warn(clippy::all, clippy::pedantic, clippy::style, clippy::use_self)]
 
 use lazy_static::lazy_static;
-use tokio::sync::Mutex;
 use std::collections::HashMap;
 use std::env;
+use tokio::sync::Mutex;
 
 pub mod command;
 mod lang;
@@ -11,25 +11,25 @@ mod lang;
 pub use command::Command;
 
 /// Green foreground color.
-pub const GREEN_FG: termion::color::Fg<termion::color::Green> =
+pub const GREEN_FG_COLOR: termion::color::Fg<termion::color::Green> =
     termion::color::Fg(termion::color::Green);
 
 /// Red foreground color.
-pub const RED_FG: termion::color::Fg<termion::color::Red> = termion::color::Fg(termion::color::Red);
+pub const RED_FG_COLOR: termion::color::Fg<termion::color::Red> =
+    termion::color::Fg(termion::color::Red);
 
 /// Reset foreground color.
-pub const RESET_FG: termion::color::Fg<termion::color::Reset> =
+pub const RESET_FG_COLOR: termion::color::Fg<termion::color::Reset> =
     termion::color::Fg(termion::color::Reset);
 
-pub const UNICODE_PROMPT: char = '❯';
+pub const PROMPT_UNICODE: char = '❯';
+pub const HOURGLASS_UNICODE: char = '';
 pub const RSHISTORY: &str = ".rshistory";
 pub const RSHELL_RC: &str = ".rshellrc";
+pub const SIGINT_EXIT_CODE: i32 = 130;
 
 lazy_static! {
     pub static ref ALIASES: Mutex<Aliases> = Mutex::new(Aliases::new());
-}
-
-lazy_static! {
     pub static ref PREVIOUS_EXIT_CODE: Mutex<i32> = Mutex::new(0);
 }
 
@@ -46,9 +46,7 @@ impl Aliases {
     fn new() -> Self {
         let mut aliases = HashMap::new();
         aliases.insert("~".to_string(), env::var("HOME").unwrap());
-        Self {
-            aliases,
-        }
+        Self { aliases }
     }
 
     pub fn set(&mut self, key: String, value: String) -> Option<String> {

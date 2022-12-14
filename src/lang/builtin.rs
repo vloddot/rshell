@@ -11,7 +11,7 @@ use std::{
     str::FromStr,
 };
 
-pub enum Builtin {
+pub(crate) enum Builtin {
     Alias,
     Builtin,
     Cd,
@@ -21,21 +21,21 @@ pub enum Builtin {
     Pwd,
 }
 
-pub enum ErrorKind {
+pub(crate) enum ErrorKind {
     InvalidInput,
     InvalidBuiltin,
 }
 
-pub struct Error<T = String> {
-    pub kind: ErrorKind,
-    pub message: T,
+pub(crate) struct Error<T = String> {
+    pub(crate) kind: ErrorKind,
+    pub(crate) message: T,
 }
 
 impl<T> Error<T>
 where
     T: Display,
 {
-    pub fn new(kind: ErrorKind, message: T) -> Self {
+    pub(crate) fn new(kind: ErrorKind, message: T) -> Self {
         Self { kind, message }
     }
 }
@@ -72,7 +72,7 @@ impl Builtin {
     /// # Panics
     ///
     /// Panics if the alias lock could not be obtained.
-    pub async fn alias(args: &[String]) -> i32 {
+    pub(crate) async fn alias(args: &[String]) -> i32 {
         let mut lock = ALIASES.lock().await;
 
         match args.len() {
@@ -102,9 +102,10 @@ impl Builtin {
         }
     }
 
+    /// Mimics `builtin` builtin Unix shell command. [Linux man page]()
     #[async_recursion]
     #[must_use]
-    pub async fn builtin(args: &[String]) -> i32 {
+    pub(crate) async fn builtin(args: &[String]) -> i32 {
         match Self::run(&args[1..]).await {
             Ok(result) => result,
             Err(error) => match error.kind {
@@ -122,7 +123,7 @@ impl Builtin {
 
     /// Mimics `cd` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/cd.1p.html)
     #[must_use]
-    pub fn cd(args: &[String]) -> i32 {
+    pub(crate) fn cd(args: &[String]) -> i32 {
         let args = clap::Command::new("cd")
             .arg(
                 Arg::new("path")
@@ -155,14 +156,14 @@ impl Builtin {
 
     /// Mimics `echo` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/echo.1p.html)
     #[must_use]
-    pub fn echo(args: &[String]) -> i32 {
+    pub(crate) fn echo(args: &[String]) -> i32 {
         println!("{}", args[1..].join(" "));
         0
     }
 
     /// Mimics `exit` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man3/exit.3.html)
     #[must_use]
-    pub fn exit(args: &[String]) -> i32 {
+    pub(crate) fn exit(args: &[String]) -> i32 {
         args.get(0)
             .unwrap_or(&String::from("0"))
             .parse()
@@ -174,7 +175,7 @@ impl Builtin {
     /// # Panics
     ///
     /// Panics if line from history file could not be read.
-    pub async fn history(_args: &[String]) -> i32 {
+    pub(crate) async fn history(_args: &[String]) -> i32 {
         let mut history = PathBuf::from(env::var("HOME").unwrap_or_else(|_| "/".to_string()));
         history.push(".rshistory");
 
@@ -191,11 +192,12 @@ impl Builtin {
 
     /// Mimics `pwd` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/pwd.1.html)
     #[must_use]
-    pub fn pwd(_args: &[String]) -> i32 {
+    pub(crate) fn pwd(_args: &[String]) -> i32 {
         let Ok(current_dir) = std::env::current_dir() else {
             error!("could not find current directory");
             return 1;
         };
+
         println!("{}", current_dir.display());
         0
     }
@@ -205,7 +207,7 @@ impl Builtin {
     /// # Errors
     ///
     /// This function will return an error if the command is not a builtin [`std::io::ErrorKind::InvalidInput`].
-    pub async fn run(args: &[String]) -> Result<i32, Error> {
+    pub(crate) async fn run(args: &[String]) -> Result<i32, Error> {
         if args.is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidInput,

@@ -1,5 +1,7 @@
 use std::env;
 
+use itertools::Itertools;
+
 use crate::Command;
 
 use super::tokens::{Token, TokenType};
@@ -24,16 +26,10 @@ impl std::fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnexpectedToken(token) => {
-                let lexeme = if token.r#type == TokenType::Eof {
-                    "<eof>"
-                } else {
-                    token.lexeme.as_str()
-                };
-
-                f.write_fmt(format_args!("unexpected {:?} token", lexeme))
+                f.write_fmt(format_args!("unexpected {}", token.r#type))
             }
-            Self::RequiredTokenNotFound(token) => {
-                f.write_fmt(format_args!("expected {:?} token", token))
+            Self::RequiredTokenNotFound(token_type) => {
+                f.write_fmt(format_args!("expected {}", token_type))
             }
         }
     }
@@ -65,21 +61,35 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.kind() {
             ErrorKind::UnexpectedToken(token) => {
-                let lexeme = if token.r#type == TokenType::Eof {
-                    "<eof>"
+                let location = if token.r#type == TokenType::Eof {
+                    String::from("at end")
                 } else {
-                    token.lexeme.as_str()
+                    format!(r#"after "{}""#, self.location.lexeme)
                 };
 
                 f.write_fmt(format_args!(
-                    "{}; expected {:?}, not {:?} after {:?}",
-                    self.kind, self.tokens, lexeme, self.location.lexeme
+                    "{}\n\nexpected {}, not {} {}",
+                    self.kind,
+                    self.tokens.iter().map(ToString::to_string).join(", "),
+                    token.r#type,
+                    location
                 ))
             }
-            ErrorKind::RequiredTokenNotFound(token) => f.write_fmt(format_args!(
-                "{}; expected a {:?} after {:?}",
-                self.kind, token, self.location.lexeme
-            )),
+            ErrorKind::RequiredTokenNotFound(token_type) => {
+                let location = if token_type == TokenType::Eof {
+                    String::from("at end")
+                } else {
+                    format!(r#"after "{}""#, self.location.lexeme)
+                };
+
+                f.write_fmt(format_args!(
+                    "{}\n\nexpected {}, not {} {}",
+                    self.kind,
+                    self.tokens.iter().map(ToString::to_string).join(","),
+                    token_type,
+                    location
+                ))
+            }
         }
     }
 }
@@ -131,16 +141,13 @@ impl Parser {
         Self { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Command>, Error> {
+    pub fn parse_tokens(&mut self) -> Result<Vec<Command>, Error> {
         let mut commands = Vec::new();
         let mut first_command = Vec::new();
 
-        // EOF token (could be a CTRL+D or just empty command).
+        // EOF token
         if self.is_at_end() {
-            return Ok(vec![Command {
-                keyword: String::new(),
-                args: Vec::new(),
-            }]);
+            return Ok(Vec::new());
         }
 
         while !self.is_at_end() {
@@ -166,7 +173,7 @@ impl Parser {
                         ));
                     }
 
-                    let other_commands = self.parse()?;
+                    let other_commands = self.parse_tokens()?;
 
                     for command in other_commands {
                         commands.push(command);
@@ -213,8 +220,8 @@ impl Parser {
 
                             if !self.r#match(&TokenType::RightBrace) {
                                 return Err(Error::new(
-                                    &[],
-                                    ErrorKind::RequiredTokenNotFound(TokenType::RightBrace),
+                                    &[TokenType::RightBrace],
+                                    ErrorKind::RequiredTokenNotFound(self.peek().r#type.clone()),
                                     self.previous().clone(),
                                 ));
                             }
@@ -228,12 +235,10 @@ impl Parser {
                         }
                     }
                 }
-                TokenType::Pipe => unimplemented!(),
-                TokenType::OrOr => unimplemented!(),
-                TokenType::Semicolon => unimplemented!(),
-                TokenType::LeftBrace => unimplemented!(),
-                TokenType::RightBrace => unimplemented!(),
-                TokenType::ColonDash => unimplemented!(),
+                token => {
+                    eprintln!("{token:?} is not implemented currently.");
+                    return Ok(Vec::new())
+                },
             }
         }
 

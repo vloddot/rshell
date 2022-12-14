@@ -1,16 +1,25 @@
 [package]
 name = "rshell"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 termion = "2.0.1"
-nom = "7.1.1"
 lazy_static = "1.4.0"
-tokio = { version = "1.22.0", features = ["full"] }
+tokio = { version = "1.23.0", features = [
+    "process",
+    "fs",
+    "sync",
+    "time",
+    "io-std",
+    "io-util",
+    "macros",
+    "rt",
+    "rt-multi-thread"
+] }
 async-recursion = "1.0.0"
 itertools = "0.10.5"
-clap = { version = "4.0.29", features = ["derive"] }
+clap = "4.0.29"
 signal-hook = "0.3.14"

@@ -1,13 +1,11 @@
 use rshell::{
-    Command, GREEN_FG, PREVIOUS_EXIT_CODE, RED_FG, RESET_FG, RSHELL_RC, RSHISTORY, UNICODE_PROMPT,
-};
-use signal_hook::{
-    consts::{SIGINT, SIGTERM},
-    iterator::Signals,
+    Command, GREEN_FG_COLOR, PREVIOUS_EXIT_CODE, PROMPT_UNICODE, RED_FG_COLOR, RESET_FG_COLOR,
+    RSHELL_RC, RSHISTORY, SIGINT_EXIT_CODE,
 };
 
+use signal_hook::{consts::SIGINT, iterator::Signals};
+
 use std::{
-    env,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -17,19 +15,10 @@ use tokio::{
     io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
 };
 
-#[derive(Debug)]
-struct CtrlC;
-
-impl std::fmt::Display for CtrlC {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Keyboard interrupt")
-    }
-}
-
 #[tokio::main]
 async fn main() -> io::Result<()> {
     // get home directory
-    let home_dir = match env::var("HOME") {
+    let home_dir = match std::env::var("HOME") {
         Ok(dir) => Some(dir),
         Err(_) => None,
     };
@@ -66,50 +55,51 @@ async fn main() -> io::Result<()> {
             let mut lines = shellrc.lines();
 
             while let Ok(Some(line)) = lines.next_line().await {
-                if let Err(error) = Command::run(&line).await {
+                if let (Err(error), _) = Command::run(&line).await {
                     rshell::error!("{error}");
                 }
             }
         }
     }
 
-    let mut signals = Signals::new([SIGINT, SIGTERM])?;
+    let mut signals = Signals::new([SIGINT])?;
 
     'main_loop: loop {
         for signal in signals.pending() {
-            match signal {
-                SIGINT => {
-                    *PREVIOUS_EXIT_CODE.lock().await = 130;
-                    continue 'main_loop;
-                }
-                SIGTERM => break 'main_loop,
-                _ => unreachable!(),
+            if let SIGINT = signal {
+                *PREVIOUS_EXIT_CODE.lock().await = SIGINT_EXIT_CODE;
+                continue 'main_loop;
             }
         }
 
-        let current_dir = env::current_dir().expect("Current directory not found.");
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| {
+            rshell::error!("Could not get current directory due to insufficient permissions or the directory does not exist.");
+            std::process::exit(1);
+        });
 
-        print_prompt(*PREVIOUS_EXIT_CODE.lock().await, home_dir.as_deref(), &current_dir);
+        print_prompt(
+            *PREVIOUS_EXIT_CODE.lock().await,
+            home_dir.as_deref(),
+            &current_dir,
+        );
 
         let command = read_command().await;
 
         // write command into history
         if let Some(ref mut history) = history {
-            history.write_all(command.as_bytes()).await.unwrap_or(());
+            history.write_all(command.as_bytes()).await?;
         }
 
-        let code = match Command::run(&command).await {
-            Ok(code) => code,
-            Err(error) => {
+        let (code, _) = match Command::run(&command).await {
+            (Ok(code), _) => (code, ()),
+            (Err(error), _) => {
                 rshell::error!("{error}");
-                error.kind().code().into()
+                (error.kind().code().into(), ())
             }
         };
 
         *PREVIOUS_EXIT_CODE.lock().await = code;
     }
-
-    Ok(())
 }
 
 /// Prints the shell prompt given the previous command's exit code, home directory
@@ -135,9 +125,9 @@ fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
         print!(
             "{} ",
             current_dir
-                .to_str()
-                .unwrap()
-                .replace(home_dir.to_str().unwrap(), "~")
+                .display()
+                .to_string()
+                .replace(&home_dir.display().to_string(), "~")
         );
     } else {
         print!("{} ", current_dir.to_str().unwrap());
@@ -146,12 +136,12 @@ fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
     print!(
         "{}{} ",
         match exit_code {
-            0 => GREEN_FG.to_string(),
-            _ => RED_FG.to_string(),
+            0 => GREEN_FG_COLOR.to_string(),
+            _ => RED_FG_COLOR.to_string(),
         },
-        UNICODE_PROMPT
+        PROMPT_UNICODE
     );
-    print!("{}", RESET_FG);
+    print!("{}", RESET_FG_COLOR);
 
     std::io::stdout().flush().expect("Could not flush.");
 }
