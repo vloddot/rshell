@@ -168,7 +168,7 @@ impl Parser {
                     {
                         return Err(Error::new(
                             &[TokenType::Part],
-                            ErrorKind::UnexpectedToken(self.peek().clone()),
+                            ErrorKind::UnexpectedToken(next_token.clone()),
                             self.previous().clone(),
                         ));
                     }

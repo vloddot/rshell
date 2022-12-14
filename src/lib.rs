@@ -34,7 +34,7 @@ lazy_static! {
 }
 
 pub struct Aliases {
-    pub aliases: HashMap<String, String>,
+    aliases: HashMap<String, String>,
 }
 
 impl Aliases {

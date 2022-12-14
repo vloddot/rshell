@@ -78,10 +78,9 @@ async fn main() -> io::Result<()> {
         });
 
         print_prompt(
-            *PREVIOUS_EXIT_CODE.lock().await,
             home_dir.as_deref(),
             &current_dir,
-        );
+        ).await;
 
         let command = read_command().await;
 
@@ -112,7 +111,7 @@ async fn main() -> io::Result<()> {
 ///
 /// # Panics
 ///
-/// Panics if the home/current directory wasn't valid UTF-8 or flushing wasn't possible.
+/// Panics if flushing wasn't possible.
 ///
 /// # Examples
 ///
@@ -120,7 +119,8 @@ async fn main() -> io::Result<()> {
 /// print_prompt(0, "/Users/any", "/Users/any/sandbox") // prints "~/sandbox ❯ " with the ❯ character green
 /// print_prompt(42069, "/Users/any", "/Users/any/sandbox") // prints "~/sandbox ❯ " with the ❯ character red
 /// ```
-fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
+async fn print_prompt(home_dir: Option<&Path>, current_dir: &Path) {
+    // print the current directory
     if let Some(home_dir) = home_dir {
         print!(
             "{} ",
@@ -130,18 +130,19 @@ fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
                 .replace(&home_dir.display().to_string(), "~")
         );
     } else {
-        print!("{} ", current_dir.to_str().unwrap());
+        print!("{} ", current_dir.display());
     }
 
+    // print the prompt and reset the color
     print!(
-        "{}{} ",
-        match exit_code {
+        "{}{}{} ",
+        match *PREVIOUS_EXIT_CODE.lock().await {
             0 => GREEN_FG_COLOR.to_string(),
             _ => RED_FG_COLOR.to_string(),
         },
-        PROMPT_UNICODE
+        PROMPT_UNICODE,
+        RESET_FG_COLOR
     );
-    print!("{}", RESET_FG_COLOR);
 
     std::io::stdout().flush().expect("Could not flush.");
 }
