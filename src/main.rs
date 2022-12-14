@@ -154,7 +154,7 @@ fn print_prompt(exit_code: i32, home_dir: Option<&Path>, current_dir: &Path) {
 ///
 /// # Exits Program
 ///
-/// Exits the program if the character given is an EOF character (CTRL+D).
+/// Exits the program if the given character is an EOF character (CTRL+D).
 async fn read_command() -> String {
     let mut command = String::new();
 

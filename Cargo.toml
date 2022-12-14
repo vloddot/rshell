@@ -8,7 +8,14 @@ edition = "2021"
 [dependencies]
 termion = "2.0.1"
 lazy_static = "1.4.0"
-tokio = { version = "1.23.0", features = [
+async-recursion = "1.0.0"
+itertools = "0.10.5"
+clap = "4.0.29"
+signal-hook = "0.3.14"
+
+[dependencies.tokio]
+version = "1.23.0"
+features = [
     "process",
     "fs",
     "sync",
@@ -18,8 +25,4 @@ tokio = { version = "1.23.0", features = [
     "macros",
     "rt",
     "rt-multi-thread"
-] }
-async-recursion = "1.0.0"
-itertools = "0.10.5"
-clap = "4.0.29"
-signal-hook = "0.3.14"
+]
