@@ -26,8 +26,8 @@ async fn main() -> io::Result<()> {
     let home_dir = home_dir.map(PathBuf::from);
 
     // open history file to store commands into history
-    let mut history = if let Some(mut history) = home_dir.clone() {
-        history.push(RSHISTORY);
+    let mut history = if let Some(home_dir) = home_dir.clone() {
+        let history = home_dir.join(RSHISTORY);
 
         match OpenOptions::new()
             .append(true)
@@ -42,25 +42,7 @@ async fn main() -> io::Result<()> {
         None
     };
 
-    // run shellrc
-    if let Some(mut shellrc) = home_dir.clone() {
-        shellrc.push(RSHELL_RC);
-
-        let shellrc = match tokio::fs::read(shellrc).await {
-            Ok(rc) => Some(rc),
-            Err(_) => None,
-        };
-
-        if let Some(shellrc) = shellrc {
-            let mut lines = shellrc.lines();
-
-            while let Ok(Some(line)) = lines.next_line().await {
-                if let (Err(error), _) = Command::run(&line).await {
-                    rshell::error!("{error}");
-                }
-            }
-        }
-    }
+    init(home_dir.as_deref()).await;
 
     let mut signals = Signals::new([SIGINT])?;
 
@@ -72,15 +54,10 @@ async fn main() -> io::Result<()> {
             }
         }
 
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| {
-            rshell::error!("Could not get current directory due to insufficient permissions or the directory does not exist.");
-            std::process::exit(1);
-        });
+        let current_dir = std::env::current_dir()?;
 
-        print_prompt(
-            home_dir.as_deref(),
-            &current_dir,
-        ).await;
+        print_prompt(home_dir.as_deref(), &current_dir).await;
+        std::io::stdout().flush()?;
 
         let command = read_command().await;
 
@@ -90,14 +67,51 @@ async fn main() -> io::Result<()> {
         }
 
         let (code, _) = match Command::run(&command).await {
-            (Ok(code), _) => (code, ()),
-            (Err(error), _) => {
+            (Ok(code), duration) => (code, duration),
+            (Err(error), duration) => {
                 rshell::error!("{error}");
-                (error.kind().code().into(), ())
+                (error.kind().code(), duration)
             }
         };
 
         *PREVIOUS_EXIT_CODE.lock().await = code;
+
+        // let current_dir = std::env::current_dir()?;
+
+        // let duration = duration.as_secs();
+
+        // print_prompt(home_dir.as_deref(), &current_dir).await;
+
+        // for _ in 0..(terminal_size.0 as usize
+        //     - (command.len() + current_dir.display().to_string().len()))
+        // {
+        //     print!(" ");
+        // }
+
+        // print!("took {HOURGLASS_UNICODE} {}s", duration);
+
+        // std::io::stdout().flush()?;
+    }
+}
+
+async fn init(home_dir: Option<&Path>) {
+    if let Some(home_dir) = home_dir {
+        let shellrc = home_dir.join(RSHELL_RC);
+
+        let shellrc = match tokio::fs::read(shellrc).await {
+            Ok(rc) => Some(rc),
+            Err(_) => None,
+        };
+
+        if let Some(shellrc) = shellrc {
+            let mut lines = shellrc.lines();
+
+            while let Ok(Some(line)) = lines.next_line().await {
+                if let (Err(_), _) = Command::run(&line).await {
+                    return;
+                }
+            }
+        }
     }
 }
 
@@ -108,10 +122,6 @@ async fn main() -> io::Result<()> {
 ///
 /// Looks like this:
 ///     "\[~ if is relative to home directory\]/\[full path\] ❯ (green or red depending on exit code success or failure respectively)"
-///
-/// # Panics
-///
-/// Panics if flushing wasn't possible.
 ///
 /// # Examples
 ///
@@ -143,8 +153,6 @@ async fn print_prompt(home_dir: Option<&Path>, current_dir: &Path) {
         PROMPT_UNICODE,
         RESET_FG_COLOR
     );
-
-    std::io::stdout().flush().expect("Could not flush.");
 }
 
 /// Reads a command from stdin and returns it.

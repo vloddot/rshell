@@ -1,7 +1,6 @@
-use tokio::{
-    io, process,
-    time::{Duration, Instant},
-};
+use tokio::{io, process};
+
+use std::time::Duration;
 
 use crate::{
     error,
@@ -10,6 +9,7 @@ use crate::{
         parser::{self, Parser},
         scanner::Scanner,
     },
+    SIGINT_EXIT_CODE,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -42,46 +42,43 @@ impl Command {
     /// # Command aliases
     ///
     /// If the command is a key inside of the `rshell::ALIASES`. It executes the aliased command.
-    async fn interpret(&self) -> (i32, Duration) {
-        let start = Instant::now();
-
+    async fn interpret(&self) -> Option<i32> {
         let mut args = self.args.clone();
         args.insert(0, self.keyword.clone());
 
-        (
-            match Builtin::run(&args).await {
-                Ok(code) => code,
-                Err(command) => {
-                    let command = command.to_string();
-                    if command.is_empty() {
-                        0
-                    } else {
-                        let process = process::Command::new(command.clone())
-                            .args(self.args.clone())
-                            .spawn();
+        match Builtin::run(&args).await {
+            Ok(code) => Some(code),
+            Err(command) => {
+                let command = command.to_string();
 
-                        match process {
-                            Ok(mut process) => match process.wait().await {
-                                Ok(process) => process.code().unwrap(),
-                                Err(error) => {
-                                    error!("{error}");
-                                    1
-                                }
-                            },
+                if command.is_empty() {
+                    Some(0)
+                } else {
+                    let process = process::Command::new(command.clone())
+                        .args(self.args.clone())
+                        .spawn();
+
+                    match process {
+                        Ok(mut process) => match process.wait().await {
+                            Ok(process) => process.code(),
                             Err(error) => {
-                                if let io::ErrorKind::NotFound = error.kind() {
-                                    error!("command not found: {command}");
-                                } else {
-                                    error!("{error}");
-                                }
-                                2
+                                error!("{error}");
+                                Some(1)
                             }
+                        },
+                        Err(error) => {
+                            let kind = error.kind();
+                            if let io::ErrorKind::NotFound = kind {
+                                error!("command not found: {command}");
+                            } else {
+                                error!("{error}");
+                            }
+                            Some(kind as i32)
                         }
                     }
                 }
-            },
-            start.elapsed(),
-        )
+            }
+        }
     }
 
     #[must_use]
@@ -94,7 +91,7 @@ impl Command {
     /// # Errors
     ///
     /// This function will return an error if parsing throws an error.
-    pub async fn run(command: &str) -> (Result<i32, parser::Error>, Duration) {
+    pub async fn run(command: &str) -> (Result<i32, parser::error::Error>, Duration) {
         let mut scanner = Scanner::new(command);
         let tokens = scanner.scan_tokens().await;
 
@@ -106,15 +103,19 @@ impl Command {
             }
         };
 
-        let mut duration_sum = Duration::default();
+        let start = tokio::time::Instant::now();
         for command in commands {
-            let (exit_code, duration) = command.interpret().await;
-            if exit_code != 0 {
-                return (Ok(exit_code), duration);
+            let exit_code = command.interpret().await;
+
+            if let Some(exit_code) = exit_code {
+                if exit_code != 0 {
+                    return (Ok(exit_code), start.elapsed());
+                }
+            } else {
+                return (Ok(SIGINT_EXIT_CODE), start.elapsed());
             }
-            duration_sum += duration;
         }
 
-        (Ok(0), duration_sum)
+        (Ok(0), start.elapsed())
     }
 }

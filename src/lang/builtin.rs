@@ -78,7 +78,7 @@ impl Builtin {
         match args.len() {
             1 => {
                 for key in lock.aliases.keys() {
-                    println!("{}='{}'", key, lock.get(key).unwrap());
+                    println!("{key}='{}'", lock.get(key).unwrap());
                 }
                 0
             }
@@ -88,7 +88,7 @@ impl Builtin {
                     lock.set(key.to_string(), value.to_string());
                     0
                 } else if let Some(value) = lock.get(args[0].clone().as_str()) {
-                    println!("{}='{}'", args[1], value);
+                    println!("{}='{value}'", args[1]);
                     0
                 } else {
                     eprintln!("alias: {} not found", args[1]);

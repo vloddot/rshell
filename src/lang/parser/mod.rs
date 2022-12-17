@@ -1,98 +1,8 @@
-use std::env;
-
-use itertools::Itertools;
-
-use crate::Command;
-
 use super::tokens::{Token, TokenType};
+use crate::Command;
+use error::{Error, Kind};
 
-#[derive(Clone, Debug)]
-#[repr(u8)]
-pub enum ErrorKind {
-    UnexpectedToken(Token),
-    RequiredTokenNotFound(TokenType),
-}
-
-impl ErrorKind {
-    pub fn code(&self) -> u8 {
-        match self {
-            Self::UnexpectedToken(_) => 1,
-            Self::RequiredTokenNotFound(_) => 2,
-        }
-    }
-}
-
-impl std::fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::UnexpectedToken(token) => {
-                f.write_fmt(format_args!("unexpected {}", token.r#type))
-            }
-            Self::RequiredTokenNotFound(token_type) => {
-                f.write_fmt(format_args!("expected {}", token_type))
-            }
-        }
-    }
-}
-
-pub struct Error {
-    tokens: &'static [TokenType],
-    kind: ErrorKind,
-    location: Token,
-}
-
-impl Error {
-    pub fn kind(&self) -> ErrorKind {
-        self.kind.clone()
-    }
-}
-
-impl Error {
-    pub fn new(tokens: &'static [TokenType], kind: ErrorKind, location: Token) -> Self {
-        Self {
-            tokens,
-            kind,
-            location,
-        }
-    }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind() {
-            ErrorKind::UnexpectedToken(token) => {
-                let location = if token.r#type == TokenType::Eof {
-                    String::from("at end")
-                } else {
-                    format!(r#"after "{}""#, self.location.lexeme)
-                };
-
-                f.write_fmt(format_args!(
-                    "{}\n\nexpected {}, not {} {}",
-                    self.kind,
-                    self.tokens.iter().map(ToString::to_string).join(", "),
-                    token.r#type,
-                    location
-                ))
-            }
-            ErrorKind::RequiredTokenNotFound(token_type) => {
-                let location = if token_type == TokenType::Eof {
-                    String::from("at end")
-                } else {
-                    format!(r#"after "{}""#, self.location.lexeme)
-                };
-
-                f.write_fmt(format_args!(
-                    "{}\n\nexpected {}, not {} {}",
-                    self.kind,
-                    self.tokens.iter().map(ToString::to_string).join(","),
-                    token_type,
-                    location
-                ))
-            }
-        }
-    }
-}
+pub mod error;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -137,10 +47,16 @@ impl Parser {
         }
     }
 
+    #[must_use]
     pub fn new(tokens: Vec<Token>) -> Self {
         Self { tokens, current: 0 }
     }
 
+    /// Returns the parse tokens of this [`Parser`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if .
     pub fn parse_tokens(&mut self) -> Result<Vec<Command>, Error> {
         let mut commands = Vec::new();
         let mut first_command = Vec::new();
@@ -166,11 +82,11 @@ impl Parser {
                     ]
                     .contains(&next_token.r#type)
                     {
-                        return Err(Error::new(
-                            &[TokenType::Part],
-                            ErrorKind::UnexpectedToken(next_token.clone()),
-                            self.previous().clone(),
-                        ));
+                        return Err(Error::new(Kind::UnexpectedToken(
+                            next_token.clone(),
+                            t,
+                            vec![TokenType::DollarSign, TokenType::Part],
+                        )));
                     }
 
                     let other_commands = self.parse_tokens()?;
@@ -194,15 +110,15 @@ impl Parser {
                     match t.r#type {
                         TokenType::Part => {
                             let var = self.advance().lexeme.clone();
-                            first_command.push(env::var(var).unwrap_or_default());
+                            first_command.push(std::env::var(var).unwrap_or_default());
                         }
                         TokenType::LeftBrace => {
                             if !self.match_next(&TokenType::Part) {
-                                return Err(Error::new(
-                                    &[TokenType::Part],
-                                    ErrorKind::UnexpectedToken(t),
-                                    self.previous().clone(),
-                                ));
+                                return Err(Error::new(Kind::UnexpectedToken(
+                                    self.peek_next().clone(),
+                                    t,
+                                    vec![TokenType::Part],
+                                )));
                             }
 
                             let var = self.advance().lexeme.clone();
@@ -211,34 +127,34 @@ impl Parser {
                             if self.r#match(&TokenType::ColonDash) && self.r#match(&TokenType::Part)
                             {
                                 first_command.push(
-                                    env::var(var)
+                                    std::env::var(var)
                                         .unwrap_or_else(|_| self.previous().lexeme.clone()),
                                 );
                             } else {
-                                first_command.push(env::var(var).unwrap_or_default());
+                                first_command.push(std::env::var(var).unwrap_or_default());
                             }
 
                             if !self.r#match(&TokenType::RightBrace) {
-                                return Err(Error::new(
-                                    &[TokenType::RightBrace],
-                                    ErrorKind::RequiredTokenNotFound(self.peek().r#type.clone()),
-                                    self.previous().clone(),
-                                ));
+                                return Err(Error::new(Kind::RequiredTokenNotFound(
+                                    self.peek().clone(),
+                                    self.peek_back().clone(),
+                                    vec![TokenType::RightBrace],
+                                )));
                             }
                         }
                         _ => {
-                            return Err(Error::new(
-                                &[TokenType::Part, TokenType::LeftBrace],
-                                ErrorKind::UnexpectedToken(t),
-                                self.previous().clone(),
-                            ))
+                            return Err(Error::new(Kind::UnexpectedToken(
+                                t,
+                                self.peek_back().clone(),
+                                vec![TokenType::Part, TokenType::LeftBrace],
+                            )))
                         }
                     }
                 }
                 token => {
                     eprintln!("{token:?} is not implemented currently.");
-                    return Ok(Vec::new())
-                },
+                    return Ok(Vec::new());
+                }
             }
         }
 
@@ -252,6 +168,10 @@ impl Parser {
 
     fn peek(&self) -> &Token {
         &self.tokens[self.current]
+    }
+
+    fn peek_back(&self) -> &Token {
+        &self.tokens[self.current - 1]
     }
 
     fn peek_next(&self) -> &Token {

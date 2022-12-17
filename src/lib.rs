@@ -6,7 +6,7 @@ use std::env;
 use tokio::sync::Mutex;
 
 pub mod command;
-mod lang;
+pub mod lang;
 
 pub use command::Command;
 
