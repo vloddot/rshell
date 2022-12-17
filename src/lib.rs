@@ -2,7 +2,7 @@
 
 use lazy_static::lazy_static;
 use std::collections::HashMap;
-use std::env;
+
 use tokio::sync::Mutex;
 
 pub mod command;
@@ -44,9 +44,9 @@ impl Aliases {
     }
 
     fn new() -> Self {
-        let mut aliases = HashMap::new();
-        aliases.insert("~".to_string(), env::var("HOME").unwrap());
-        Self { aliases }
+        Self {
+            aliases: HashMap::new(),
+        }
     }
 
     pub fn set(&mut self, key: String, value: String) -> Option<String> {

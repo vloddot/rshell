@@ -85,6 +85,7 @@ impl Builtin {
             2 => {
                 if args[1].contains('=') {
                     let (key, value) = args[1].split_once('=').unwrap();
+                    let value = value.trim_matches('\'').trim_matches('"');
                     lock.set(key.to_string(), value.to_string());
                     0
                 } else if let Some(value) = lock.get(args[0].clone().as_str()) {

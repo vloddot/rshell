@@ -11,6 +11,31 @@ pub(crate) struct Scanner {
     source: Vec<char>,
 }
 
+#[derive(Clone)]
+enum QuoteType {
+    Any,
+    Single,
+    Double,
+}
+
+impl From<QuoteType> for char {
+    fn from(r#type: QuoteType) -> Self {
+        match r#type {
+            QuoteType::Single => '\'',
+            QuoteType::Double | QuoteType::Any => '"',
+        }
+    }
+}
+
+impl From<char> for QuoteType {
+    fn from(value: char) -> Self {
+        match value {
+            '\'' => Self::Single,
+            '"' => Self::Double,
+            _ => Self::Any,
+        }
+    }
+}
 impl Scanner {
     fn add_token(&mut self, r#type: TokenType) {
         let text: String = self.source[self.start..self.current].iter().collect();
@@ -45,27 +70,62 @@ impl Scanner {
         }
     }
 
-    async fn part(&mut self, start: usize) {
-        let mut inside_quotes = false;
-        let mut c = self.peek();
+    async fn part(&mut self, start: usize, quote_type: QuoteType) {
+        if let QuoteType::Any = quote_type {
+            let mut quote_type: Option<QuoteType> = None;
 
-        while Self::is_part(c) || (inside_quotes && c == ' ') {
-            self.advance();
-            c = self.peek();
+            let mut inside_quotes = false;
+            let mut c = self.peek();
 
-            inside_quotes = if vec!['\'', '"'].contains(&c) || inside_quotes {
-                true
-            } else {
-                vec!['\'', '"'].contains(&c) && !inside_quotes
-            };
+            while Self::is_part(c) || (inside_quotes && c == ' ') {
+                self.advance();
+                c = self.peek();
+
+                if let Some(quote_type) = quote_type.clone() {
+                    inside_quotes = if c == quote_type.clone().into() || inside_quotes {
+                        true
+                    } else {
+                        c == quote_type.into() && !inside_quotes
+                    }
+                } else {
+                    inside_quotes = if vec!['\'', '"'].contains(&c) || inside_quotes {
+                        quote_type = Some(c.into());
+                        true
+                    } else {
+                        vec!['\'', '"'].contains(&c) && !inside_quotes
+                    }
+                }
+            }
+        } else {
+            let quote_type: char = char::from(quote_type);
+
+            let mut inside_quotes = false;
+            let mut c = self.peek();
+
+            while Self::is_part(c) || (inside_quotes && c == ' ') {
+                self.advance();
+                c = self.peek();
+
+                inside_quotes = if c == quote_type || inside_quotes {
+                    true
+                } else {
+                    c == quote_type && !inside_quotes
+                };
+            }
         }
-
-        let text: String = self.source[start..self.current].iter().collect();
 
         let alias_lock = ALIASES.lock().await;
 
-        if let Some(value) = alias_lock.get(text.as_str()) {
-            self.add_token_with_lexeme(TokenType::Part, value.to_string());
+        if let Some(value) = alias_lock.get(
+            self.source[start..self.current]
+                .iter()
+                .collect::<String>()
+                .as_str(),
+        ) {
+            // handle multiple args
+            for value in value.split(' ') {
+                self.add_token_with_lexeme(TokenType::Part, value.to_string());
+            }
             return;
         }
 
@@ -161,7 +221,9 @@ impl Scanner {
                 self.add_token_with_lexeme(TokenType::Part, text);
             }
             ';' => self.add_token(TokenType::Semicolon),
-            _ => self.part(self.start).await,
+            '\'' => self.part(self.start, QuoteType::Single).await,
+            '"' => self.part(self.start, QuoteType::Double).await,
+            _ => self.part(self.start, QuoteType::Any).await,
         }
     }
 
@@ -172,8 +234,11 @@ impl Scanner {
         }
 
         // EOF
-        self.tokens
-            .push(Token::new(TokenType::Eof, String::new(), self.current));
+        self.tokens.push(Token::new(
+            TokenType::default(),
+            String::new(),
+            self.current,
+        ));
 
         self.tokens.clone()
     }

@@ -73,7 +73,7 @@ impl Command {
                             } else {
                                 error!("{error}");
                             }
-                            Some(kind as i32)
+                            Some(2)
                         }
                     }
                 }

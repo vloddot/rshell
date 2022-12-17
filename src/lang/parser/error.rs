@@ -6,14 +6,16 @@ use crate::lang::tokens::Token;
 #[repr(i32)]
 pub enum Kind {
     UnexpectedToken(Token, Token, Vec<TokenType>) = 1,
-    RequiredTokenNotFound(Token, Token, Vec<TokenType>),
+    RequiredTokenNotFound(Token, Token, Vec<TokenType>) = 2,
 }
 
 impl Kind {
     #[must_use]
     pub fn code(self) -> i32 {
-        // self as i32
-        0
+        match self {
+            Self::UnexpectedToken(_, _, _) => 1,
+            Self::RequiredTokenNotFound(_, _, _) => 2,
+        }
     }
 }
 

@@ -1,4 +1,4 @@
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub location: usize,
     pub r#type: TokenType,
