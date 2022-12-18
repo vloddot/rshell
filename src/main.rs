@@ -75,22 +75,6 @@ async fn main() -> io::Result<()> {
         };
 
         *PREVIOUS_EXIT_CODE.lock().await = code;
-
-        // let current_dir = std::env::current_dir()?;
-
-        // let duration = duration.as_secs();
-
-        // print_prompt(home_dir.as_deref(), &current_dir).await;
-
-        // for _ in 0..(terminal_size.0 as usize
-        //     - (command.len() + current_dir.display().to_string().len()))
-        // {
-        //     print!(" ");
-        // }
-
-        // print!("took {HOURGLASS_UNICODE} {}s", duration);
-
-        // std::io::stdout().flush()?;
     }
 }
 
@@ -159,11 +143,11 @@ async fn print_prompt(home_dir: Option<&Path>, current_dir: &Path) {
 ///
 /// # Panics
 ///
-/// Panics if the `BufReader` couldn't read from stdin.
+/// Panics if the [`BufReader`] couldn't read from stdin.
 ///
-/// # Exits Program
+/// # Exits
 ///
-/// Exits the program if the given character is an EOF character (CTRL+D).
+/// Exits the program if the character read is an EOF character (CTRL+D).
 async fn read_command() -> String {
     let mut command = String::new();
 

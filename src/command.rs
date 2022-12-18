@@ -9,7 +9,6 @@ use crate::{
         parser::{self, Parser},
         scanner::Scanner,
     },
-    SIGINT_EXIT_CODE,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -42,17 +41,17 @@ impl Command {
     /// # Command aliases
     ///
     /// If the command is a key inside of the `rshell::ALIASES`. It executes the aliased command.
-    async fn interpret(&self) -> Option<i32> {
+    async fn interpret(&self) -> i32 {
         let mut args = self.args.clone();
         args.insert(0, self.keyword.clone());
 
         match Builtin::run(&args).await {
-            Ok(code) => Some(code),
+            Ok(code) => code,
             Err(command) => {
                 let command = command.to_string();
 
                 if command.is_empty() {
-                    Some(0)
+                    0
                 } else {
                     let process = process::Command::new(command.clone())
                         .args(self.args.clone())
@@ -60,10 +59,10 @@ impl Command {
 
                     match process {
                         Ok(mut process) => match process.wait().await {
-                            Ok(process) => process.code(),
+                            Ok(process) => process.code().unwrap(),
                             Err(error) => {
                                 error!("{error}");
-                                Some(1)
+                                1
                             }
                         },
                         Err(error) => {
@@ -73,7 +72,7 @@ impl Command {
                             } else {
                                 error!("{error}");
                             }
-                            Some(2)
+                            2
                         }
                     }
                 }
@@ -107,12 +106,8 @@ impl Command {
         for command in commands {
             let exit_code = command.interpret().await;
 
-            if let Some(exit_code) = exit_code {
-                if exit_code != 0 {
-                    return (Ok(exit_code), start.elapsed());
-                }
-            } else {
-                return (Ok(SIGINT_EXIT_CODE), start.elapsed());
+            if exit_code != 0 {
+                return (Ok(exit_code), start.elapsed());
             }
         }
 

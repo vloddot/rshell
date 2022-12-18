@@ -1,15 +1,16 @@
+#![allow(clippy::module_name_repetitions)]
+
+use crate::lang::tokens::{Token, TokenType};
 use itertools::Itertools;
-use crate::lang::tokens::TokenType;
-use crate::lang::tokens::Token;
 
 #[derive(Clone, Debug)]
 #[repr(i32)]
-pub enum Kind {
+pub enum ErrorKind {
     UnexpectedToken(Token, Token, Vec<TokenType>) = 1,
     RequiredTokenNotFound(Token, Token, Vec<TokenType>) = 2,
 }
 
-impl Kind {
+impl ErrorKind {
     #[must_use]
     pub fn code(self) -> i32 {
         match self {
@@ -19,7 +20,7 @@ impl Kind {
     }
 }
 
-impl std::fmt::Display for Kind {
+impl std::fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnexpectedToken(unexpected_token, _, _) => {
@@ -34,19 +35,19 @@ impl std::fmt::Display for Kind {
 }
 
 pub struct Error {
-    kind: Kind,
+    kind: ErrorKind,
 }
 
 impl Error {
     #[must_use]
-    pub fn kind(&self) -> Kind {
+    pub fn kind(&self) -> ErrorKind {
         self.kind.clone()
     }
 }
 
 impl Error {
     #[must_use]
-    pub fn new(kind: Kind) -> Self {
+    pub fn new(kind: ErrorKind) -> Self {
         Self { kind }
     }
 }
@@ -54,7 +55,7 @@ impl Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.kind() {
-            Kind::UnexpectedToken(unexpected_token, after_token, expected_tokens) => {
+            ErrorKind::UnexpectedToken(unexpected_token, after_token, expected_tokens) => {
                 let location = if unexpected_token.r#type == TokenType::Eof {
                     "at end".into()
                 } else {
@@ -69,7 +70,7 @@ impl std::fmt::Display for Error {
                     location
                 ))
             }
-            Kind::RequiredTokenNotFound(found_token, after_token, expected_tokens) => {
+            ErrorKind::RequiredTokenNotFound(found_token, after_token, expected_tokens) => {
                 let location = if let TokenType::Eof = after_token.r#type {
                     String::from("at end")
                 } else {

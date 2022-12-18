@@ -2,7 +2,9 @@ use crate::error;
 
 use crate::ALIASES;
 use async_recursion::async_recursion;
-use clap::{Arg, ArgAction};
+use clap::Arg;
+use clap::ArgAction;
+
 use std::{
     env,
     fmt::Display,
@@ -73,34 +75,40 @@ impl Builtin {
     ///
     /// Panics if the alias lock could not be obtained.
     pub(crate) async fn alias(args: &[String]) -> i32 {
+        let args = clap::Command::new("alias")
+            .arg(
+                Arg::new("alias-name")
+                    .action(ArgAction::Set)
+                    .required(false),
+            )
+            .try_get_matches_from(args);
+
+        let Ok(args) = args else {
+            eprintln!("alias: bad argument");
+            return 1;
+        };
+
         let mut lock = ALIASES.lock().await;
 
-        match args.len() {
-            1 => {
-                for key in lock.aliases.keys() {
-                    println!("{key}='{}'", lock.get(key).unwrap());
-                }
-                0
+        let Ok(Some(alias_name)) = args.try_get_one::<String>("alias-name") else {
+            for (key, value) in lock.aliases.clone() {
+                println!("{key}={value}");
             }
-            2 => {
-                if args[1].contains('=') {
-                    let (key, value) = args[1].split_once('=').unwrap();
-                    let value = value.trim_matches('\'').trim_matches('"');
-                    lock.set(key.to_string(), value.to_string());
-                    0
-                } else if let Some(value) = lock.get(args[0].clone().as_str()) {
-                    println!("{}='{value}'", args[1]);
-                    0
-                } else {
-                    eprintln!("alias: {} not found", args[1]);
-                    2
-                }
-            }
-            _ => {
-                eprintln!("alias: too many arguments");
-                3
-            }
+            return 0;
+        };
+
+        if alias_name.contains('=') {
+            let (key, value) = alias_name.split_once('=').unwrap();
+            let value = value.trim_matches('\'').trim_matches('"');
+            lock.set(key.to_string(), value.to_string());
+        } else if let Some(value) = lock.get(alias_name) {
+            println!("{alias_name}={value}");
+        } else {
+            eprintln!("alias: {alias_name} not found");
+            return 2;
         }
+
+        0
     }
 
     /// Mimics `builtin` builtin Unix shell command. [Linux man page]()
@@ -125,22 +133,12 @@ impl Builtin {
     /// Mimics `cd` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/cd.1p.html)
     #[must_use]
     pub(crate) fn cd(args: &[String]) -> i32 {
-        let args = clap::Command::new("cd")
-            .arg(
-                Arg::new("path")
-                    .action(ArgAction::Set)
-                    .value_name("PATH")
-                    .help("The path to change current directory to."),
-            )
-            .try_get_matches_from(args);
-
-        let Ok(args) = args else {
-            eprintln!("cd: invalid args\n\nUsage: cd [PATH]");
+        if args.len() != 2 {
+            eprintln!("cd: expected [PATH] argument");
             return 1;
-        };
+        }
 
-        let home_dir = &env::var("HOME").unwrap_or_else(|_| String::from("/"));
-        let path = Path::new(args.get_one("path").unwrap_or(home_dir));
+        let path = Path::new(&args[1]);
 
         if !path.exists() {
             eprintln!("cd: no such file or directory: {}", path.display());
@@ -149,10 +147,10 @@ impl Builtin {
 
         if let Err(error) = std::env::set_current_dir(path) {
             eprintln!("cd: {error}");
-            3
-        } else {
-            0
+            return 3;
         }
+
+        0
     }
 
     /// Mimics `echo` builtin Unix shell command. [Linux man page](https://man7.org/linux/man-pages/man1/echo.1p.html)

@@ -70,7 +70,7 @@ impl Scanner {
         }
     }
 
-    async fn part(&mut self, start: usize, quote_type: QuoteType) {
+    fn part(&mut self, quote_type: QuoteType) {
         if let QuoteType::Any = quote_type {
             let mut quote_type: Option<QuoteType> = None;
 
@@ -114,20 +114,20 @@ impl Scanner {
             }
         }
 
-        let alias_lock = ALIASES.lock().await;
+        // let alias_lock = ALIASES.lock().await;
 
-        if let Some(value) = alias_lock.get(
-            self.source[start..self.current]
-                .iter()
-                .collect::<String>()
-                .as_str(),
-        ) {
-            // handle multiple args
-            for value in value.split(' ') {
-                self.add_token_with_lexeme(TokenType::Part, value.to_string());
-            }
-            return;
-        }
+        // if let Some(value) = alias_lock.get(
+        //     self.source[start..self.current]
+        //         .iter()
+        //         .collect::<String>()
+        //         .as_str(),
+        // ) {
+        //     // handle multiple args
+        //     for value in value.split(' ') {
+        //         self.add_token_with_lexeme(TokenType::Part, value.to_string());
+        //     }
+        //     return;
+        // }
 
         self.add_token(TokenType::Part);
     }
@@ -221,9 +221,9 @@ impl Scanner {
                 self.add_token_with_lexeme(TokenType::Part, text);
             }
             ';' => self.add_token(TokenType::Semicolon),
-            '\'' => self.part(self.start, QuoteType::Single).await,
-            '"' => self.part(self.start, QuoteType::Double).await,
-            _ => self.part(self.start, QuoteType::Any).await,
+            '\'' => self.part(QuoteType::Single),
+            '"' => self.part(QuoteType::Double),
+            _ => self.part(QuoteType::Any),
         }
     }
 

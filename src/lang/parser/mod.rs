@@ -1,6 +1,6 @@
 use super::tokens::{Token, TokenType};
 use crate::Command;
-use error::{Error, Kind};
+use error::{Error, ErrorKind};
 
 pub mod error;
 
@@ -82,7 +82,7 @@ impl Parser {
                     ]
                     .contains(&next_token.r#type)
                     {
-                        return Err(Error::new(Kind::UnexpectedToken(
+                        return Err(Error::new(ErrorKind::UnexpectedToken(
                             next_token.clone(),
                             t,
                             vec![TokenType::DollarSign, TokenType::Part],
@@ -114,7 +114,7 @@ impl Parser {
                         }
                         TokenType::LeftBrace => {
                             if !self.match_next(&TokenType::Part) {
-                                return Err(Error::new(Kind::UnexpectedToken(
+                                return Err(Error::new(ErrorKind::UnexpectedToken(
                                     self.peek_next().clone(),
                                     t,
                                     vec![TokenType::Part],
@@ -135,7 +135,7 @@ impl Parser {
                             }
 
                             if !self.r#match(&TokenType::RightBrace) {
-                                return Err(Error::new(Kind::RequiredTokenNotFound(
+                                return Err(Error::new(ErrorKind::RequiredTokenNotFound(
                                     self.peek().clone(),
                                     self.peek_back().clone(),
                                     vec![TokenType::RightBrace],
@@ -143,7 +143,7 @@ impl Parser {
                             }
                         }
                         _ => {
-                            return Err(Error::new(Kind::UnexpectedToken(
+                            return Err(Error::new(ErrorKind::UnexpectedToken(
                                 t,
                                 self.peek_back().clone(),
                                 vec![TokenType::Part, TokenType::LeftBrace],
